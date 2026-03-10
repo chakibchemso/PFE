@@ -1,0 +1,137 @@
+[package]
+edition = "2024"
+name = "esp32"
+rust-version = "1.88"
+version = "0.1.0"
+
+[[bin]]
+name = "esp32"
+path = "./src/bin/main.rs"
+test = false
+bench = false
+
+[lib]
+test = false
+bench = false
+
+[[test]]
+harness = false
+name = "hello_test"
+
+
+[dependencies]
+# !### project crates ###
+# crypto
+ascon-aead = "0.5"
+getrandom = { version = "0.2", features = ["custom"] }
+# oxymeter
+max3010x = "0.2"
+biquad = "0.5"
+# transport
+rust-mqtt = { version = "0.4.1", default-features = false, features = [
+  "bump",
+  "v5",
+] }
+
+# !### espressif crates ###
+# provides the bootloader and app description for flashing
+esp-bootloader-esp-idf = { version = "0.4.0", features = ["defmt", "esp32s3"] }
+# provides the HAL impl for the ESP32
+esp-hal = { version = "~1.0", features = ["defmt", "esp32s3", "unstable"] }
+# provides heap mem allocation for the ESP32
+esp-alloc = { version = "0.9.0", features = ["defmt"] }
+# provides async runtime, alloc, and radio support
+esp-rtos = { version = "0.2.0", features = [
+  "defmt",
+  "esp32s3",
+  "embassy",
+  "esp-alloc",
+  "esp-radio",
+] }
+# provides Wi-Fi and Bluetooth support for the ESP32 (driver L2)
+esp-radio = { version = "0.17.0", features = [
+  "defmt",
+  "esp32s3",
+  "ble",
+  "coex",
+  "esp-alloc",
+  "smoltcp",
+  "unstable",
+  "wifi",
+] }
+
+# !### debugging crates ###
+# fuck regular logging
+defmt = "1.0.1"
+# enables RTT logging support
+rtt-target = { version = "0.6.2", features = ["defmt"] }
+# enables panic messages to be sent over RTT
+panic-rtt-target = { version = "0.2.0", features = ["defmt"] }
+
+# !### embassy crates ###
+# task executor async (wrapped by esp-rtos)
+embassy-executor = { version = "0.9.1", features = ["defmt"] }
+# time(r) management
+embassy-time = { version = "0.5.0", features = ["defmt"] }
+# network async
+embassy-net = { version = "0.8.0", features = [
+  "defmt",
+  "dhcpv4",
+  "medium-ethernet",
+  "tcp",
+  "udp",
+  "dns",
+] }
+# TODO
+embassy-sync = { version = "0.7.2", features = ["defmt"] }
+
+
+# !### networking crates ###
+# Transport L3/L4
+smoltcp = { version = "0.12.0", default-features = false, features = [
+  "defmt",
+  "medium-ethernet",
+  "multicast",
+  "proto-dhcpv4",
+  "proto-dns",
+  "proto-ipv4",
+  "socket-dns",
+  "socket-icmp",
+  "socket-raw",
+  "socket-tcp",
+  "socket-udp",
+] }
+# bt garbage
+# bt-hci = "0.8.0"
+# more bt garbage
+# trouble-host = { version = "0.6.0", features = ["gatt"] }
+
+# !### utility crates ###
+# self explanatory
+critical-section = "1.2.0"
+# fucking self explanatory
+static_cell = "2.1.1"
+libm = "0.2.16"
+# TODO: why? just why!
+# embedded-io = { version = "0.7.1", features = ["defmt"] }
+# embedded-io-async = { version = "0.7.0", features = ["defmt"] }
+
+[dev-dependencies]
+embedded-test = { version = "0.7.0", features = [
+  "defmt",
+  "embassy",
+  "external-executor",
+  "xtensa-semihosting",
+] }
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+codegen-units = 1        # LLVM can perform better optimizations using a single thread
+debug = 2
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = 's'
+overflow-checks = false

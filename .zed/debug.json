@@ -1,0 +1,28 @@
+// Project-local debug tasks
+//
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+    "label": "probe-rs attach esp32",
+    "adapter": "probe-rs",
+    "request": "attach",
+    "cwd": "$ZED_WORKTREE_ROOT/esp32",
+    // "server": "127.0.0.1:50000",
+    "type": "probe-rs-debug",
+    "chip": "esp32s3",
+    "coreConfigs": [
+      {
+        "coreIndex": 0,
+        "programBinary": "target/xtensa-esp32s3-none-elf/debug/esp32",
+        "rttEnabled": true,
+        "rttChannelFormats": [
+          {
+            "channelNumber": 0,
+            "dataFormat": "Defmt",
+          }
+        ],
+      }
+    ]
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "folders": [
+    { "path": "." },
+    { "path": "./webapp" },
+    { "path": "./esp32" },
+    { "path": "./fpga" },
+  ],
+  "settings": {
+    "dependi.rust.lockFileEnabled": false,
+
+    "rust-analyzer.linkedProjects": [
+      "./esp32/Cargo.toml",
+      "./webapp/Cargo.toml",
+    ],
+    "rust-analyzer.cargo.features": "all",
+  },
+}
