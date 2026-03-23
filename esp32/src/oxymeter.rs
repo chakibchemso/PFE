@@ -1,3 +1,4 @@
+use defmt::println;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::{Receiver, Watch};
@@ -24,11 +25,11 @@ pub struct OxymeterRunner {
     sensor: Max3010x<I2c<'static, Blocking>, Max30102, Oximeter>,
 
     // RED Pipeline
-    dc_blocker_red: MovingMeanSubtractor<100>,
+    dc_block_red: MovingMeanSubtractor<100>,
     bandpass_red: FirFilter<201>,
 
     // IR Pipeline
-    dc_blocker_ir: MovingMeanSubtractor<100>,
+    dc_block_ir: MovingMeanSubtractor<100>,
     bandpass_ir: FirFilter<201>,
 
     bpm_calc: BpmCalculator,
@@ -41,7 +42,7 @@ impl OxymeterRunner {
 
         loop {
             if self.sensor.get_available_sample_count().unwrap_or(0) == 0 {
-                Timer::after(Duration::from_millis(1)).await;
+                Timer::after(Duration::from_millis(20)).await;
                 continue;
             }
 
@@ -57,8 +58,8 @@ impl OxymeterRunner {
                         let raw_ir = ir as f32;
 
                         // 1. Strip the DC offset (and save the mean for SpO2 math)
-                        let (pre_dc_red, dc_mean_red) = self.dc_blocker_red.process(raw_red);
-                        let (pre_dc_ir, dc_mean_ir) = self.dc_blocker_ir.process(raw_ir);
+                        let (pre_dc_red, dc_mean_red) = self.dc_block_red.process(raw_red);
+                        let (pre_dc_ir, dc_mean_ir) = self.dc_block_ir.process(raw_ir);
 
                         // 2. Apply the FIR Bandpass
                         let clean_red = self.bandpass_red.process(pre_dc_red);
@@ -75,12 +76,9 @@ impl OxymeterRunner {
                         // ---------------------------------
 
                         // DUMP TO SERIAL FOR PYTHON
-                        defmt::println!(
+                        println!(
                             "Raw,{=f32},PreDC,{=f32},CleanRed,{=f32},CleanIr,{=f32}",
-                            raw_red,
-                            pre_dc_red,
-                            clean_red,
-                            clean_ir
+                            raw_red, pre_dc_red, clean_red, clean_ir
                         );
 
                         // Feed the ultimate smoothed signal into BPM calc
@@ -117,18 +115,18 @@ impl OxymeterHandle {
 
         // 400 SPS with Sa4 = 100 Hz effective sample rate
         sensor.set_sampling_rate(SamplingRate::Sps400).unwrap();
+        sensor.set_sample_averaging(SampleAveraging::Sa4).unwrap();
+        sensor.set_pulse_amplitude(Led::All, 0x1F).unwrap();
         sensor.set_pulse_width(LedPulseWidth::Pw411).unwrap();
         sensor.set_adc_range(AdcRange::Fs4k).unwrap();
-        sensor.set_pulse_amplitude(Led::All, 0x1F).unwrap();
-        sensor.set_sample_averaging(SampleAveraging::Sa4).unwrap();
         sensor.enable_fifo_rollover().unwrap();
         sensor.clear_fifo().unwrap();
 
         let runner = OxymeterRunner {
             sensor,
-            dc_blocker_red: MovingMeanSubtractor::new(),
+            dc_block_red: MovingMeanSubtractor::new(),
             bandpass_red: FirFilter::new(FIR_COEFFS),
-            dc_blocker_ir: MovingMeanSubtractor::new(),
+            dc_block_ir: MovingMeanSubtractor::new(),
             bandpass_ir: FirFilter::new(FIR_COEFFS),
             bpm_calc: BpmCalculator::new(100.0),
             spo2_calc: Spo2Calculator::new(),

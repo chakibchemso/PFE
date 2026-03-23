@@ -1,10 +1,9 @@
 pub mod app;
 pub mod components;
-
-// only on client side
-#[cfg(feature = "hydrate")]
 pub mod crypto;
 
+// only on client side
+// #[cfg(feature = "hydrate")]
 // only on server side
 #[cfg(feature = "ssr")]
 pub mod mqtt;

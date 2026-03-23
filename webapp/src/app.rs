@@ -56,10 +56,6 @@ fn HomePage() -> impl IntoView {
         set_count.update(|count| *count += 1);
     };
 
-    let (ctxt, set_ctxt) = signal("cyphertxt");
-    let (bpm, set_bpm) = signal(75);
-    let (spo2, set_spo2) = signal(98);
-
     Effect::new(move |_| {
         // Perform side effect here
     });
@@ -67,9 +63,6 @@ fn HomePage() -> impl IntoView {
     view! {
         <h1>"Welcome to Leptos!"</h1>
         <crate::components::MqttViewer/>
-        <p>"cypher: " {ctxt}</p>
-        <p>"BPM: " {bpm}</p>
-        <p>"SpO2: " {spo2}</p>
         <button on:click=on_click>"Click Me: " {count}</button>
     }
 }

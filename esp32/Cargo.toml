@@ -20,7 +20,7 @@ name = "hello_test"
 
 
 [dependencies]
-# !### project crates ###
+# ! ### project crates ###
 # crypto
 ascon-aead = "0.5"
 getrandom = { version = "0.2", features = ["custom"] }
@@ -32,8 +32,10 @@ rust-mqtt = { version = "0.4.1", default-features = false, features = [
   "bump",
   "v5",
 ] }
+embedded-tls = { version = "0.18.0", default-features = false, features = ["defmt"] }
+rand_core = "0.10.0"
 
-# !### espressif crates ###
+# ! ### espressif crates ###
 # provides the bootloader and app description for flashing
 esp-bootloader-esp-idf = { version = "0.4.0", features = ["defmt", "esp32s3"] }
 # provides the HAL impl for the ESP32
@@ -60,7 +62,7 @@ esp-radio = { version = "0.17.0", features = [
   "wifi",
 ] }
 
-# !### debugging crates ###
+# ! ### debugging crates ###
 # fuck regular logging
 defmt = "1.0.1"
 # enables RTT logging support
@@ -68,7 +70,7 @@ rtt-target = { version = "0.6.2", features = ["defmt"] }
 # enables panic messages to be sent over RTT
 panic-rtt-target = { version = "0.2.0", features = ["defmt"] }
 
-# !### embassy crates ###
+# ! ### embassy crates ###
 # task executor async (wrapped by esp-rtos)
 embassy-executor = { version = "0.9.1", features = ["defmt"] }
 # time(r) management
@@ -86,7 +88,7 @@ embassy-net = { version = "0.8.0", features = [
 embassy-sync = { version = "0.7.2", features = ["defmt"] }
 
 
-# !### networking crates ###
+# ! ### networking crates ###
 # Transport L3/L4
 smoltcp = { version = "0.12.0", default-features = false, features = [
   "defmt",
@@ -106,7 +108,7 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
 # more bt garbage
 # trouble-host = { version = "0.6.0", features = ["gatt"] }
 
-# !### utility crates ###
+# ! ### utility crates ###
 # self explanatory
 critical-section = "1.2.0"
 # fucking self explanatory

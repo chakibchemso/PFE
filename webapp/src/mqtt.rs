@@ -1,6 +1,6 @@
-use rumqttc::{ AsyncClient, Event, MqttOptions, Packet, QoS };
-use std::{ future::Future, time::Duration };
-use tokio::{ sync::broadcast, task, time };
+use rumqttc::{AsyncClient, Event, MqttOptions, Packet, QoS};
+use std::{future::Future, time::Duration};
+use tokio::{sync::broadcast, task, time};
 
 /// A small ergonomic async MQTT client wrapper around `rumqttc::AsyncClient`.
 ///
@@ -18,10 +18,12 @@ impl MqttClient {
     pub async fn new<S: Into<String>>(
         client_id: S,
         host: S,
-        port: u16
+        port: u16,
+        username: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut mqttoptions = MqttOptions::new(client_id, host, port);
         mqttoptions.set_keep_alive(Duration::from_secs(5));
+        mqttoptions.set_credentials(username, "");
 
         let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
 
@@ -52,7 +54,10 @@ impl MqttClient {
             }
         });
 
-        Ok(MqttClient { client, broadcaster: tx })
+        Ok(MqttClient {
+            client,
+            broadcaster: tx,
+        })
     }
 
     /// Subscribe to a topic with the provided QoS.
@@ -68,9 +73,9 @@ impl MqttClient {
     /// Register an async handler callback that will be called for each incoming message.
     /// The handler is a function/closure that returns a Future; it runs in a spawned task.
     pub fn subscribe_with_callback<F, Fut>(&self, mut handler: F)
-        where
-            F: FnMut(String, Vec<u8>) -> Fut + Send + 'static,
-            Fut: Future<Output = ()> + Send + 'static
+    where
+        F: FnMut(String, Vec<u8>) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
     {
         let mut rx = self.subscribe_stream();
         task::spawn(async move {
@@ -114,7 +119,7 @@ impl MqttClient {
         topic: &str,
         qos: QoS,
         retain: bool,
-        payload: P
+        payload: P,
     ) -> Result<(), rumqttc::ClientError> {
         self.client.publish(topic, qos, retain, payload).await
     }
@@ -125,9 +130,10 @@ impl MqttClient {
         topic: &str,
         qos: QoS,
         retain: bool,
-        text: &str
+        text: &str,
     ) -> Result<(), rumqttc::ClientError> {
-        self.publish(topic, qos, retain, text.as_bytes().to_vec()).await
+        self.publish(topic, qos, retain, text.as_bytes().to_vec())
+            .await
     }
 }
 

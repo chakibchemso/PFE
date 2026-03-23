@@ -1,9 +1,7 @@
 use alloc::vec::Vec;
 use ascon_aead::{
-    AsconAead128,
-    AsconAead128Key,
-    AsconAead128Nonce,
-    aead::{ Aead, AeadCore, OsRng },
+    AsconAead128, AsconAead128Key, AsconAead128Nonce,
+    aead::{Aead, AeadCore, OsRng},
 };
 
 pub struct Ascon {
@@ -19,9 +17,8 @@ impl Ascon {
 
     pub fn encrypt(&self, plaintext: &[u8]) -> (Vec<u8>, [u8; 16]) {
         let nonce = AsconAead128::generate_nonce(&mut OsRng);
-        let ciphertext = Aead::encrypt(&self.cipher, &nonce, plaintext).expect(
-            "encryption failure!"
-        );
+        let ciphertext =
+            Aead::encrypt(&self.cipher, &nonce, plaintext).expect("encryption failure!");
         (ciphertext, nonce.into())
     }
 

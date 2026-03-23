@@ -20,36 +20,36 @@ getrandom::register_custom_getrandom!(utils::custom_getrandom);
 async fn main(spawner: Spawner) -> ! {
     rtt_target::rtt_init_defmt!();
 
-    //? Initialize peripherals and clocks
+    // ? Initialize peripherals and clocks
     let p = {
         let conf = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
         esp_hal::init(conf)
     };
 
-    //? Initialize heap
-    let _ = {
+    // ? Initialize heap
+    {
         esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
         esp_alloc::heap_allocator!(size: 64 * 1024);
-    };
+    }
 
-    //? Initialize RTOS (required for embassy and radio)
-    let _ = {
+    // ? Initialize RTOS (required for embassy and radio)
+    {
         let timg0 = TimerGroup::new(p.TIMG0);
         esp_rtos::start(timg0.timer0);
-    };
+    }
 
-    //? Initialize radio controller
+    // ? Initialize radio controller
     let rd_ctrl = mk_static!(
         Controller<'static>,
         esp_radio::init().expect("Failed to initialize radio controller")
     );
 
-    //? Initialize WiFi
+    // ? Initialize WiFi
     let (wf_ctrl, wf_device) =
         esp_radio::wifi::new(rd_ctrl, p.WIFI, esp_radio::wifi::Config::default())
             .expect("Failed to initialize WiFi control");
 
-    //? Initialize network stack
+    // ? Initialize network stack
     let (stack, runner) = {
         let sta_conf = embassy_net::Config::dhcpv4(Default::default());
 
@@ -69,8 +69,8 @@ async fn main(spawner: Spawner) -> ! {
         )
     };
 
-    //? Spawn WiFi and network tasks
-    let _ = {
+    // ? Spawn WiFi and network tasks
+    {
         spawner.spawn(wifi::connection_task(wf_ctrl)).unwrap();
         spawner.spawn(wifi::net_task(runner)).unwrap();
 
@@ -81,7 +81,7 @@ async fn main(spawner: Spawner) -> ! {
         info!("Connected! Got IP: {}", ip_info.address);
     };
 
-    info!("Embassy initialized!");
+    info!("initialized!");
 
     let mut oxymeter = {
         let i2c = I2c::new(p.I2C0, Config::default())
@@ -98,14 +98,14 @@ async fn main(spawner: Spawner) -> ! {
         crypto::Ascon::new(key)
     };
 
-    // TODO: Spawn some tasks
-    let _ = spawner;
+    // start mqtt
     spawner.spawn(mqtt::mqtt_task(stack)).unwrap();
 
+    // ! main loop
     loop {
         info!("loop start!");
 
-        // !acquisition
+        // ! acquisition
         // let bpm = oxymeter.read_bpm();
         // let spo2 = oxymeter.read_spo2();
         // let temp = oxymeter.read_temp();
@@ -114,7 +114,7 @@ async fn main(spawner: Spawner) -> ! {
         let temp = oxymeter.temp();
         info!("Sensor data: BPM: {}, SPO2: {}, Temp: {}", bpm, spo2, temp);
 
-        // !fusion
+        // ! fusion
         let data = {
             let mut out = [0u8; 12];
             out[0..4].copy_from_slice(&bpm.to_le_bytes());
@@ -124,24 +124,23 @@ async fn main(spawner: Spawner) -> ! {
         };
         info!("Prcrypted data: {}", utils::print_hex(&data).as_str());
 
-        // !encryption
+        // ! encryption
         let (ciphertext, nonce) = cipher.encrypt(&data);
         info!("Encrypted data: {}", utils::print_hex(&ciphertext).as_str());
 
-        // !transport
-        let _ = {
+        // ! transport
+        {
             let mut payload = Vec::new();
             payload.extend_from_slice(nonce.as_slice());
             payload.extend_from_slice(ciphertext.as_slice());
             DATA_CHANNEL.send(payload).await;
-        };
+        }
 
-        // !decryption
+        // ! decryption
         let plaintext = cipher.decrypt(&ciphertext, &nonce);
         info!("Decrypted data: {}", utils::print_hex(&plaintext).as_str());
-        // info!("Decrypted data: {:X}", plaintext.as_slice());
 
-        // !parsing
+        // ! parsing
         let (bpm, spo2, temp) = (
             f32::from_le_bytes(plaintext[0..4].try_into().unwrap()),
             f32::from_le_bytes(plaintext[4..8].try_into().unwrap()),

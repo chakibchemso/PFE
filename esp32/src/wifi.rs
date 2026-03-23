@@ -1,7 +1,7 @@
 use defmt::info;
 use embassy_net::Runner;
 use embassy_time::{Duration, Timer};
-use esp_radio::wifi::{WifiController, WifiDevice, WifiEvent};
+use esp_radio::wifi::{ClientConfig, WifiController, WifiDevice, WifiEvent};
 
 /// Background task that drives the WiFi hardware connection
 #[embassy_executor::task]
@@ -9,7 +9,7 @@ pub async fn connection_task(mut controller: WifiController<'static>) {
     info!("Starting WiFi connection task...");
 
     let client_config = esp_radio::wifi::ModeConfig::Client(
-        esp_radio::wifi::ClientConfig::default()
+        ClientConfig::default()
             .with_ssid("IDOOM_5G".try_into().unwrap())
             // .with_ssid("IDOOM_FH".try_into().unwrap())
             .with_password("213550870218".try_into().unwrap())

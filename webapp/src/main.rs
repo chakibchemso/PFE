@@ -11,9 +11,14 @@ async fn main() {
         use webapp::components::mqtt_state::LATEST_PAYLOAD;
         use webapp::mqtt::MqttClient;
 
-        let mqtt = MqttClient::new("chakibchemso-pfe-0x06", "test.mosquitto.org", 1883)
-            .await
-            .unwrap();
+        let mqtt = MqttClient::new(
+            "chakibchemso-pfe-0x06",
+            "mqtt.flespi.io",
+            1883,
+            "CVMmN9jh83Fw6wqCfjwwelf2zIBCeJJBHSx9jL4zyiUfiIhpzuBsS5RShmyWOaQM",
+        )
+        .await
+        .unwrap();
         mqtt.subscribe("chakibchemso/esp32/data", QoS::AtMostOnce)
             .await
             .unwrap();
