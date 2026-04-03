@@ -20,7 +20,7 @@ const BUFFER_CAPACITY: usize = 8192;
 
 const SERVERNAME: &str = "mqtt.flespi.io";
 const SERVERPORT: u16 = 1883;
-const USERNAME: &str = "CVMmN9jh83Fw6wqCfjwwelf2zIBCeJJBHSx9jL4zyiUfiIhpzuBsS5RShmyWOaQM";
+const USERNAME: &str = "u2cA97FbFg4JdXfDkr8urhiFPAkeBnHj9cBicV8gAvWy3VgbdgT8BtqlGDzMl34K";
 const CLIENTNAME: &str = "chakibchemso-esp32-0x03";
 const TOPICNAME: &str = "chakibchemso/esp32/data";
 

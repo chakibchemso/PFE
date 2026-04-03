@@ -10,9 +10,11 @@ pub async fn connection_task(mut controller: WifiController<'static>) {
 
     let client_config = esp_radio::wifi::ModeConfig::Client(
         ClientConfig::default()
-            .with_ssid("IDOOM_5G".try_into().unwrap())
+            .with_ssid("Y@@cine".try_into().unwrap())
+            .with_password("yaza0102030405@yaza".try_into().unwrap())
+            // .with_ssid("IDOOM_5G".try_into().unwrap())
             // .with_ssid("IDOOM_FH".try_into().unwrap())
-            .with_password("213550870218".try_into().unwrap())
+            // .with_password("213550870218".try_into().unwrap())
             // .with_ssid("LMSE".try_into().unwrap())
             // .with_password("Ust0Lmse2023".try_into().unwrap()),
             // .with_ssid("ルビー".try_into().unwrap())

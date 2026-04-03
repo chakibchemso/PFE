@@ -15,7 +15,7 @@ async fn main() {
             "chakibchemso-pfe-0x06",
             "mqtt.flespi.io",
             1883,
-            "CVMmN9jh83Fw6wqCfjwwelf2zIBCeJJBHSx9jL4zyiUfiIhpzuBsS5RShmyWOaQM",
+            "t3YdLdmvwcA92f9X162f4ceKdXLBPYThMZ37EchcuKupUF7ltvuIPyFFD3KL8GHg",
         )
         .await
         .unwrap();

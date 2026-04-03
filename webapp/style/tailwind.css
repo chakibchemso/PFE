@@ -1,0 +1,53 @@
+@import "tailwindcss";
+@source "../src";
+
+/* 1. Tell Tailwind to generate utility classes from these variables */
+@theme {
+    --color-ctp-base: var(--theme-base);
+    --color-ctp-mantle: var(--theme-mantle);
+    --color-ctp-surface: var(--theme-surface);
+    --color-ctp-text: var(--theme-text);
+    --color-ctp-subtext: var(--theme-subtext);
+    --color-ctp-primary: var(--theme-primary);
+    --color-ctp-primary-content: var(--theme-primary-content);
+    --color-ctp-danger: var(--theme-danger);
+    --color-ctp-success: var(--theme-success);
+    --color-ctp-warning: var(--theme-warning);
+}
+
+/* 2. Catppuccin Latte (Light Mode Default) */
+:root {
+    --theme-base: #eff1f5;
+    --theme-mantle: #e6e9ef;
+    --theme-surface: #ccd0da;
+    --theme-text: #4c4f69;
+    --theme-subtext: #5c5f77;
+    --theme-primary: #1e66f5;
+    --theme-primary-content: #eff1f5;
+    --theme-danger: #d20f39;
+    --theme-success: #40a02b;
+    --theme-warning: #fe640b;
+}
+
+/* 3. Catppuccin Mocha (Dark Mode Override) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --theme-base: #1e1e2e;
+        --theme-mantle: #181825;
+        --theme-surface: #313244;
+        --theme-text: #cdd6f4;
+        --theme-subtext: #a6adc8;
+        --theme-primary: #89b4fa;
+        --theme-primary-content: #11111b;
+        --theme-danger: #f38ba8;
+        --theme-success: #a6e3a1;
+        --theme-warning: #fab387;
+    }
+}
+
+/* Base styles for the entire page */
+body {
+    background-color: var(--theme-base);
+    color: var(--theme-text);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
