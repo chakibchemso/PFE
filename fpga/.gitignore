@@ -1,0 +1,15 @@
+# Gowin EDA - Project-specific temporary files
+impl/
+temp/
+stdout.log
+*.log
+*.rpt
+*.txt
+
+# Binary and Bitstream outputs
+*.fs
+*.bin
+*.itxt
+
+# IP Core generated source (unless you want to version the generated netlist)
+# It is usually better to only track the .ipc file.

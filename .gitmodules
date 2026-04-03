@@ -1,0 +1,3 @@
+[submodule "fpga/ascon-hardware"]
+	path = fpga/ascon-hardware
+	url = https://github.com/ascon/ascon-hardware

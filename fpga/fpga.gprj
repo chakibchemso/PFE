@@ -1,0 +1,26 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW5A-25A" pn="GW5A-LV25MG121NC1/I0">gw5a25a-002</Device>
+    <FileList>
+        <File path="src/top.sv" type="file.verilog" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/FIFO.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/LWC.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/NIST_LWAPI_pkg.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/PostProcessor.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/PreProcessor.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/data_piso.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/data_sipo.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/LWC_rtl/key_piso.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/ascon_lwc/src_rtl/v2/CryptoCore.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/ascon_lwc/src_rtl/v2/LWC_config_32.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/ascon_lwc/src_rtl/v2/LWC_config_ascon.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/ascon_lwc/src_rtl/v2/LWC_config_ccw_32.vhd" type="file.vhdl" enable="1"/>
+        <File path="ascon-hardware/hardware/ascon_lwc/src_rtl/v2/design_pkg.vhd" type="file.vhdl" enable="1"/>
+        <File path="src/fpga.cst" type="file.cst" enable="1"/>
+        <File path="src/fpga.sdc" type="file.sdc" enable="1"/>
+        <File path="src/fpga.rao" type="file.gao" enable="1"/>
+    </FileList>
+</Project>
