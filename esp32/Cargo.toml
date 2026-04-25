@@ -4,6 +4,10 @@ name = "esp32"
 rust-version = "1.88"
 version = "0.1.0"
 
+[features]
+# Enable live signal plotting via serial (adds overhead to DSP loop)
+plot = []
+
 [[bin]]
 name = "esp32"
 path = "./src/bin/main.rs"
@@ -26,20 +30,25 @@ ascon-aead = "0.5"
 getrandom = { version = "0.2", features = ["custom"] }
 # oxymeter
 max3010x = "0.2"
-biquad = "0.5"
 # transport
-rust-mqtt = { version = "0.4.1", default-features = false, features = [
+rust-mqtt = { version = "0.5", default-features = false, features = [
   "bump",
   "v5",
 ] }
-embedded-tls = { version = "0.18.0", default-features = false, features = ["defmt"] }
-rand_core = "0.10.0"
+# ui
+embedded-graphics = "0.8"
+slint = { version = "1.16", default-features = false, features = [
+    "unsafe-single-threaded",
+    "compat-1-2",
+    "libm",
+    "renderer-software",
+] }
 
 # ! ### espressif crates ###
 # provides the bootloader and app description for flashing
 esp-bootloader-esp-idf = { version = "0.4.0", features = ["defmt", "esp32s3"] }
 # provides the HAL impl for the ESP32
-esp-hal = { version = "~1.0", features = ["defmt", "esp32s3", "unstable"] }
+esp-hal = { version = "~1.0", features = ["defmt", "esp32s3", "unstable", "psram"] }
 # provides heap mem allocation for the ESP32
 esp-alloc = { version = "0.9.0", features = ["defmt"] }
 # provides async runtime, alloc, and radio support
@@ -72,25 +81,27 @@ panic-rtt-target = { version = "0.2.0", features = ["defmt"] }
 
 # ! ### embassy crates ###
 # task executor async (wrapped by esp-rtos)
-embassy-executor = { version = "0.9.1", features = ["defmt"] }
+embassy-executor = { version = "0.9", features = ["defmt"] }
 # time(r) management
-embassy-time = { version = "0.5.0", features = ["defmt"] }
+embassy-time = { version = "0.5", features = ["defmt"] }
 # network async
-embassy-net = { version = "0.8.0", features = [
+embassy-net = { version = "0.9", features = [
   "defmt",
   "dhcpv4",
   "medium-ethernet",
   "tcp",
   "udp",
   "dns",
+  "proto-ipv4",
 ] }
 # TODO
-embassy-sync = { version = "0.7.2", features = ["defmt"] }
+embassy-sync = { version = "0.7", features = ["defmt"] }
+embassy-embedded-hal = "0.5"
 
 
 # ! ### networking crates ###
 # Transport L3/L4
-smoltcp = { version = "0.12.0", default-features = false, features = [
+smoltcp = { version = "0.12", default-features = false, features = [
   "defmt",
   "medium-ethernet",
   "multicast",
@@ -108,6 +119,14 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
 # more bt garbage
 # trouble-host = { version = "0.6.0", features = ["gatt"] }
 
+# ! ### display crates ###
+# The Core Display Architecture
+display-interface = "0.5"
+display-interface-spi = "0.5"
+# The Specific Drivers
+lcd-async = "0.1"  # Async fork of mipidsi - handles ST7796 with async SPI
+ft6x36 = "0.6"    # Driver for your FT6336U touch chip
+
 # ! ### utility crates ###
 # self explanatory
 critical-section = "1.2.0"
@@ -119,12 +138,15 @@ libm = "0.2.16"
 # embedded-io-async = { version = "0.7.0", features = ["defmt"] }
 
 [dev-dependencies]
-embedded-test = { version = "0.7.0", features = [
+embedded-test = { version = "0.7", features = [
   "defmt",
   "embassy",
   "external-executor",
   "xtensa-semihosting",
 ] }
+
+[build-dependencies]
+slint-build = "1.5"
 
 [profile.dev]
 opt-level = "s"

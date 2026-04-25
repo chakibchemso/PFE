@@ -1,0 +1,22 @@
+import { Theme } from "../theme.slint";
+
+/// Page indicator dots at bottom of screen
+export component PageIndicator inherits HorizontalLayout {
+    in property <int> active_page: 0;
+    in property <int> page_count: 5;
+
+    spacing: 8px;
+    alignment: center;
+    height: 10px;
+
+    for i in root.page_count: Rectangle {
+        width: root.active_page == i ? 18px : 8px;
+        height: 8px;
+        border-radius: 4px;
+        background: root.active_page == i ? Theme.text : Theme.surface1;
+        animate width {
+            duration: 200ms;
+            easing: ease-in-out;
+        }
+    }
+}

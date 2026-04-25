@@ -1,0 +1,11 @@
+import { Theme } from "../theme.slint";
+
+/// Section header label for settings
+export component SectionHeader inherits Text {
+    in property <string> title: "";
+
+    text: title;
+    color: Theme.subtext;
+    font-size: 13px;
+    font-weight: 600;
+}

@@ -1,21 +1,22 @@
 use alloc::borrow::ToOwned;
-use embassy_net::{Stack, tcp::TcpSocket};
+use core::num::NonZeroU16;
+use embassy_net::{Stack, dns::DnsQueryType, tcp::TcpSocket};
 use embassy_time::{Duration, Timer};
 use rust_mqtt::{
     Bytes,
     buffer::BumpBuffer,
     client::{
         Client,
-        options::{ConnectOptions, PublicationOptions},
+        options::{ConnectOptions, PublicationOptions, TopicReference},
     },
     config::{KeepAlive, SessionExpiryInterval},
     types::{MqttString, QoS, TopicName},
 };
-use smoltcp::wire::DnsQueryType;
 
 const MAX_SUBSCRIBES: usize = 5;
 const RECEIVE_MAXIMUM: usize = 5;
 const SEND_MAXIMUM: usize = 5;
+const MAX_SUBSCRIPTION_IDENTIFIERS: usize = 0;
 const BUFFER_CAPACITY: usize = 8192;
 
 const SERVERNAME: &str = "mqtt.flespi.io";
@@ -57,23 +58,29 @@ pub async fn mqtt_task(stack: Stack<'static>) -> ! {
         // 3. Create MQTT Client with BumpBuffer
         let mut buffer_storage = [0u8; BUFFER_CAPACITY];
         let mut buffer = BumpBuffer::new(&mut buffer_storage);
-        let mut client =
-            Client::<_, _, MAX_SUBSCRIBES, RECEIVE_MAXIMUM, SEND_MAXIMUM>::new(&mut buffer);
+        let mut client = Client::<
+            _,
+            _,
+            MAX_SUBSCRIBES,
+            RECEIVE_MAXIMUM,
+            SEND_MAXIMUM,
+            MAX_SUBSCRIPTION_IDENTIFIERS,
+        >::new(&mut buffer);
 
         // 4. Setup CONNECT options
         let connect_options = ConnectOptions {
             clean_start: true,
-            keep_alive: KeepAlive::Seconds(60),
+            keep_alive: KeepAlive::Seconds(NonZeroU16::new(60).unwrap()),
             session_expiry_interval: SessionExpiryInterval::EndOnDisconnect,
-            // user_name: Some(MqttString::from_slice("chakibchemso").unwrap()),
-            // password: Some(MqttBinary::from_slice(b"ZyT&cwk2Z@NF1bFew#$f").unwrap()),
-            user_name: Some(MqttString::from_slice(USERNAME).unwrap()),
+            // user_name: Some(MqttString::from_str("chakibchemso").unwrap()),
+            user_name: Some(MqttString::from_str(USERNAME).unwrap()),
             password: None,
             will: None,
+            ..Default::default()
         };
 
         // 5. Connect to MQTT Broker
-        let client_id = match MqttString::from_slice(CLIENTNAME) {
+        let client_id = match MqttString::from_str(CLIENTNAME) {
             Ok(id) => Some(id),
             Err(_) => {
                 defmt::error!("Failed to create client ID - string too long");
@@ -91,15 +98,9 @@ pub async fn mqtt_task(stack: Stack<'static>) -> ! {
 
         let receiver = crate::DATA_CHANNEL.receiver();
 
-        let topic_name = MqttString::from_slice(TOPICNAME).expect("invalid topic name");
-
-        let topic = unsafe { TopicName::new_unchecked(topic_name) };
-
-        let pub_options = PublicationOptions {
-            qos: QoS::AtMostOnce,
-            retain: false,
-            topic,
-        };
+        let topic_name = MqttString::from_str(TOPICNAME).expect("invalid topic name");
+        let topic = TopicName::new(topic_name).expect("invalid topic");
+        let pub_options = PublicationOptions::new(TopicReference::Name(topic)).qos(QoS::AtMostOnce);
 
         // 6. Main Loop - handle data publishing
         loop {

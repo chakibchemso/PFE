@@ -1,105 +1,238 @@
+"""
+Live scrolling plotter for ESP32 telemetry.
+
+Reads compact text protocol from stdin:
+  @R:<id>:<name>:<r>,<g>,<b>  - register channel
+  @D:<id>:<value>              - data point
+  @C                           - clear all
+
+Renders fixed-size scrolling graphs in a grid layout using matplotlib.
+Dynamically adds subplots as new channels are registered.
+"""
+
 import queue
-import re
 import sys
 import threading
 from collections import deque
+from typing import Iterable
 
 import matplotlib
 
 matplotlib.use("QtAgg")
 import matplotlib.animation as animation
+import matplotlib.figure
 import matplotlib.pyplot as plt
 
-# Thread-safe queue to pass data from the terminal to the GUI
-data_queue = queue.Queue()
+# Thread-safe queue to pass data from stdin to the GUI
+data_queue: queue.Queue[str] = queue.Queue()
+
+# ─── Configuration ───────────────────────────────────────────────────────────
+
+BUFFER_SIZE = 200  # samples visible in the scroll window
+FIG_BG = (0.07, 0.07, 0.095)  # dark background
+AXES_BG = (0.09, 0.09, 0.125)
+GRID_COLOR = (0.18, 0.18, 0.22)
+TEXT_COLOR = (0.78, 0.78, 0.82)
+UPDATE_INTERVAL = 33  # ms (~30 fps, balances smoothness and CPU)
 
 
-def read_stdin():
-    # Matches sequences like "Raw,123.4", "Clean,-0.5"
-    pattern = re.compile(r"([a-zA-Z0-9_]+),([-+]?\d*\.\d+|\d+)")
+# ─── Data Layer ──────────────────────────────────────────────────────────────
 
+
+def stdin_reader():
+    """Read lines from stdin and push plot frames to the queue."""
     for line in sys.stdin:
-        matches = pattern.findall(line)
-
-        if matches:
-            try:
-                parsed_data = {name: float(val) for name, val in matches}
-                data_queue.put(parsed_data)
-            except ValueError:
-                pass
+        line = line.strip()
+        if not line:
+            # Skip blank lines
+            continue
+        if line.startswith("@"):
+            data_queue.put(line)
         else:
-            # If it's not CSV data, print it straight to the terminal!
-            print(line, end="", flush=True)
+            sys.stdout.write(line + "\n")
+            sys.stdout.flush()
 
 
-# Start the background reader thread
-t = threading.Thread(target=read_stdin, daemon=True)
-t.start()
-
-# --- Plot Setup ---
-WINDOW_SIZE = 200
-x_data = list(range(WINDOW_SIZE))
-
-fig = plt.figure(figsize=(10, 6))
-if fig.canvas.manager is not None:
-    fig.canvas.manager.set_window_title("MAX30102 Live Telemetry")
-
-# Track our dynamic signals
-signal_names = []
-data_buffers = {}
-axes = {}
-lines = {}
+# Channel state
+channels: dict[int, dict] = {}  # id -> {name, color, buffer}
+channel_order: list[int] = []  # insertion order
+fig: matplotlib.figure.Figure | None = None
+axes_list: list = []  # [(ax, line, ch_id), ...]
+waiting_text = None  # "Waiting for data..." text handle
 
 
-def update_plot(frame):
-    updated = False
-    new_signal_added = False
+def parse_frame(line: str):
+    """Parse a @R/@D/@C frame and update channel state."""
+    if line == "@C":
+        channels.clear()
+        channel_order.clear()
+        return
 
-    # Empty the queue into our rolling buffers
+    parts = line.split(":")
+    if len(parts) < 3:
+        return
+
+    frame_type = parts[0]
+
+    if frame_type == "@R" and len(parts) >= 4:
+        # @R:<id>:<name>:<r>,<g>,<b>
+        try:
+            ch_id = int(parts[1])
+            name = parts[2]
+            rgb = parts[3].split(",")
+            color = (int(rgb[0]) / 255, int(rgb[1]) / 255, int(rgb[2]) / 255)
+        except (ValueError, IndexError):
+            return
+
+        if ch_id not in channels:
+            channels[ch_id] = {
+                "name": name,
+                "color": color,
+                "buffer": deque([0.0] * BUFFER_SIZE, maxlen=BUFFER_SIZE),
+            }
+            channel_order.append(ch_id)
+
+    elif frame_type == "@D" and len(parts) >= 3:
+        # @D:<id>:<value>
+        try:
+            ch_id = int(parts[1])
+            value = float(parts[2])
+        except (ValueError, IndexError):
+            return
+
+        if ch_id in channels:
+            channels[ch_id]["buffer"].append(value)
+
+
+def rebuild_layout():
+    """Rebuild the entire subplot layout to accommodate new channels."""
+    global axes_list, waiting_text, fig
+
+    num_plots = len(channel_order)
+    if num_plots == 0:
+        return
+
+    assert fig is not None
+
+    # Clear the figure completely
+    fig.clear()
+    fig.set_facecolor(FIG_BG)
+    axes_list = []
+    x_data = list(range(BUFFER_SIZE))
+
+    for i, ch_id in enumerate(channel_order):
+        ch = channels[ch_id]
+        ax = fig.add_subplot(num_plots, 1, i + 1)
+        ax.set_facecolor(AXES_BG)
+        ax.set_title(
+            ch["name"], color=ch["color"], fontsize=10, loc="left", weight="bold"
+        )
+
+        (line,) = ax.plot(x_data, list(ch["buffer"]), color=ch["color"], linewidth=1.2)
+        ax.grid(True, color=GRID_COLOR, linewidth=0.5, alpha=0.5)
+        ax.tick_params(colors=TEXT_COLOR)
+        for spine in ax.spines.values():
+            spine.set_color(GRID_COLOR)
+
+        axes_list.append((ax, line, ch_id))
+
+    fig.tight_layout(pad=1.5)
+    waiting_text = None  # No longer showing waiting message
+
+
+def update_plot(_frame) -> Iterable:
+    """Update plot data each frame."""
+    global fig
+
+    # Drain the queue
+    new_channel_added = False
     while not data_queue.empty():
-        new_data = data_queue.get()
+        try:
+            line = data_queue.get_nowait()
+            # Check if this is a new channel registration before parsing
+            if line.startswith("@R:"):
+                parts = line.split(":")
+                if len(parts) >= 4:
+                    try:
+                        ch_id = int(parts[1])
+                        if ch_id not in channels:
+                            new_channel_added = True
+                    except ValueError:
+                        pass
+            parse_frame(line)
+        except queue.Empty:
+            break
 
-        for name, val in new_data.items():
-            # If we detect a brand new signal name
-            if name not in signal_names:
-                signal_names.append(name)
-                data_buffers[name] = deque([0.0] * WINDOW_SIZE, maxlen=WINDOW_SIZE)
-                new_signal_added = True
+    # If new channels were added, rebuild the layout
+    if new_channel_added:
+        rebuild_layout()
+        return []
 
-            data_buffers[name].append(val)
-            updated = True
+    if not axes_list:
+        return []
 
-    # If a new signal appeared, we need to rebuild the subplot stack
-    if new_signal_added:
-        num_plots = len(signal_names)
+    result = []
+    for ax, line, ch_id in axes_list:
+        if ch_id in channels:
+            ch = channels[ch_id]
+            buf = ch["buffer"]
 
-        for i, name in enumerate(signal_names):
-            if name not in axes:
-                # Add a new subplot at the bottom of the stack
-                ax = fig.add_subplot(num_plots, 1, i + 1)
-                (line,) = ax.plot(x_data, data_buffers[name], label=name)
-                ax.legend(loc="upper right")
+            if len(buf) > 1:
+                line.set_ydata(list(buf))
 
-                axes[name] = ax
-                lines[name] = line
-            else:
-                # Update the geometry of existing plots to make room
-                axes[name].change_geometry(num_plots, 1, i + 1)
+                # Auto-scale Y
+                data_min = min(buf)
+                data_max = max(buf)
+                margin = max((data_max - data_min) * 0.1, 0.5)
+                ax.set_ylim(data_min - margin, data_max + margin)
 
-        # Redraw the layout so the new stack fits nicely
-        fig.tight_layout()
-        fig.canvas.draw_idle()
+                # Update title with current value
+                current = buf[-1]
+                ax.set_title(
+                    f"{ch['name']}  =  {current:.1f}",
+                    color=ch["color"],
+                    fontsize=10,
+                    loc="left",
+                    weight="bold",
+                )
 
-    # Update the data for all lines
-    if updated:
-        for name in signal_names:
-            lines[name].set_ydata(data_buffers[name])
-            axes[name].relim()
-            axes[name].autoscale_view(True, True, True)
+                result.append(line)
 
-    return list(lines.values())
+    return result
 
 
-ani = animation.FuncAnimation(fig, update_plot, interval=20, cache_frame_data=False)
+# ─── Entry Point ─────────────────────────────────────────────────────────────
 
-plt.show()
+if __name__ == "__main__":
+    # Start stdin reader in background
+    t = threading.Thread(target=stdin_reader, daemon=True)
+    t.start()
+
+    # Initialize empty figure with "waiting" message
+    fig = plt.figure(figsize=(10, 4), facecolor=FIG_BG)
+    assert fig.canvas.manager is not None
+    fig.canvas.manager.set_window_title("ESP32 Live Plotter")
+
+    ax = fig.add_subplot(1, 1, 1)
+    ax.set_facecolor(AXES_BG)
+    waiting_text = ax.text(
+        0.5,
+        0.5,
+        "Waiting for data...",
+        ha="center",
+        va="center",
+        color=TEXT_COLOR,
+        fontsize=14,
+        transform=ax.transAxes,
+    )
+    ax.tick_params(colors=TEXT_COLOR)
+    for spine in ax.spines.values():
+        spine.set_color(GRID_COLOR)
+
+    fig.tight_layout()
+
+    ani = animation.FuncAnimation(
+        fig, update_plot, interval=UPDATE_INTERVAL, cache_frame_data=False
+    )
+
+    plt.show()

@@ -1,0 +1,258 @@
+import { Theme } from "../theme.slint";
+import { ToggleSwitch } from "../components/toggle_switch.slint";
+import { SectionHeader } from "../components/section_header.slint";
+
+/// Settings info card (label + right-side value, no toggle)
+component InfoCard inherits Rectangle {
+    in property <string> label: "";
+    in property <string> value: "";
+    in property <color> value_color: Theme.yellow;
+    in property <length> card_width: 0px;
+
+    width: card_width;
+    height: 52px;
+    border-radius: 16px;
+    background: Theme.surface0;
+
+    Text {
+        x: 16px;
+        y: 14px;
+        text: label;
+        color: Theme.text;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    Text {
+        x: card_width - 64px;
+        y: 14px;
+        text: value;
+        color: value_color;
+        font-size: 14px;
+        font-weight: 700;
+    }
+}
+
+/// Settings toggle card with TouchArea
+component ToggleCard inherits Rectangle {
+    in property <string> label: "";
+    in property <string> subtitle: "";
+    in-out property <bool> toggled: false;
+    in property <length> card_width: 0px;
+
+    width: card_width;
+    height: 64px;
+    border-radius: 18px;
+    background: Theme.mantle;
+    border-color: Theme.surface0;
+    border-width: 1px;
+
+    Text {
+        x: 16px;
+        y: 14px;
+        text: label;
+        color: Theme.text;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    Text {
+        x: 16px;
+        y: 36px;
+        text: subtitle;
+        color: Theme.subtext;
+        font-size: 12px;
+    }
+
+    ToggleSwitch {
+        x: card_width - 56px;
+        y: 15px;
+        enabled <=> root.toggled;
+    }
+
+    TouchArea {
+        width: card_width;
+        height: parent.height;
+        clicked => {
+            root.toggled = !root.toggled;
+        }
+    }
+}
+
+export component SettingsPage inherits Rectangle {
+    in-out property <bool> dark_mode: true;
+    in-out property <bool> show_fps: false;
+    property <length> safe-inset: 48px;
+    property <length> card_width: 320px - safe-inset * 2 - 16px;
+
+    background: Theme.base;
+
+    // Title - fixed at top
+    Text {
+        x: 0;
+        y: safe-inset - 8px;
+        width: parent.width;
+        text: "Settings";
+        color: Theme.text;
+        font-size: 26px;
+        font-weight: 700;
+        horizontal-alignment: center;
+    }
+
+    // Flickable scrollable content area
+    Flickable {
+        x: 0;
+        y: safe-inset + 24px;
+        width: parent.width;
+        height: parent.height - safe-inset * 2 - 48px;
+        viewport-width: 320px - safe-inset * 2 - 16px;
+        viewport-height: 900px;
+
+        Rectangle {
+            x: safe-inset + 8px;
+            y: 0px;
+            width: 320px - 48px * 2 - 16px;
+            height: 900px;
+            background: transparent;
+
+            VerticalLayout {
+                x: 0;
+                y: 0;
+                width: parent.width;
+                spacing: 12px;
+
+                // Theme section
+                SectionHeader {
+                    title: "Theme";
+                }
+
+                ToggleCard {
+                    label: "Dark Mode";
+                    subtitle: root.dark_mode ? "Mocha" : "Latte";
+                    toggled <=> root.dark_mode;
+                    card_width: root.card_width;
+                }
+
+                ToggleCard {
+                    label: "Show FPS";
+                    subtitle: root.show_fps ? "On" : "Off";
+                    toggled <=> root.show_fps;
+                    card_width: root.card_width;
+                }
+
+                // Display section
+                SectionHeader {
+                    title: "Display";
+                }
+
+                InfoCard {
+                    label: "Always-On";
+                    value: "Auto";
+                    value_color: Theme.yellow;
+                    card_width: root.card_width;
+                }
+
+                InfoCard {
+                    label: "Brightness";
+                    value: "80%";
+                    value_color: Theme.accent;
+                    card_width: root.card_width;
+                }
+
+                // Sound & haptics section
+                SectionHeader {
+                    title: "Sound & Haptics";
+                }
+
+                InfoCard {
+                    label: "Haptics";
+                    value: "On";
+                    value_color: Theme.green;
+                    card_width: root.card_width;
+                }
+
+                InfoCard {
+                    label: "Volume";
+                    value: "70%";
+                    value_color: Theme.accent;
+                    card_width: root.card_width;
+                }
+
+                // Connectivity section
+                SectionHeader {
+                    title: "Connectivity";
+                }
+
+                InfoCard {
+                    label: "Wi-Fi";
+                    value: "On";
+                    value_color: Theme.green;
+                    card_width: root.card_width;
+                }
+
+                InfoCard {
+                    label: "Bluetooth";
+                    value: "Off";
+                    value_color: Theme.subtext;
+                    card_width: root.card_width;
+                }
+
+                // Security section
+                SectionHeader {
+                    title: "Security";
+                }
+
+                InfoCard {
+                    label: "ASCON Encryption";
+                    value: "On";
+                    value_color: Theme.accent;
+                    card_width: root.card_width;
+                }
+
+                // System section
+                SectionHeader {
+                    title: "System";
+                }
+
+                Rectangle {
+                    width: root.card_width;
+                    height: 52px;
+                    border-radius: 16px;
+                    background: Theme.surface0;
+
+                    Text {
+                        x: 16px;
+                        y: 14px;
+                        text: "About";
+                        color: Theme.text;
+                        font-size: 16px;
+                        font-weight: 600;
+                    }
+
+                    Text {
+                        x: root.card_width - 80px;
+                        y: 14px;
+                        text: "v1.0.0";
+                        color: Theme.subtext;
+                        font-size: 14px;
+                        font-weight: 700;
+                    }
+                }
+
+                InfoCard {
+                    label: "Reset";
+                    value: "";
+                    value_color: Theme.red;
+                    card_width: root.card_width;
+                }
+
+                // Spacer at bottom for scroll padding
+                Rectangle {
+                    width: root.card_width;
+                    height: 12px;
+                    background: transparent;
+                }
+            }
+        }
+    }
+}

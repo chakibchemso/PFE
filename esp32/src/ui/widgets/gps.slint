@@ -1,0 +1,41 @@
+import { Theme } from "../theme.slint";
+import { CompassRing } from "../components/compass_ring.slint";
+
+export component GpsPage inherits Rectangle {
+    in property <bool> gps_fix: false;
+    property <length> safe-inset: 48px;
+
+    background: Theme.base;
+
+    // Title
+    Text {
+        x: 0;
+        y: safe-inset - 8px;
+        width: parent.width;
+        text: "GPS";
+        color: Theme.text;
+        font-size: 26px;
+        font-weight: 700;
+        horizontal-alignment: center;
+    }
+
+    // Compass
+    CompassRing {
+        x: parent.width / 2 - 72px;
+        y: parent.height / 2 + 10px - 72px;
+        needle_angle: 28;
+        has_fix: gps_fix;
+    }
+
+    // Status text
+    Text {
+        x: 0;
+        y: parent.height - safe-inset;
+        width: parent.width;
+        text: gps_fix ? "Fix locked" : "Searching";
+        color: gps_fix ? Theme.green : Theme.peach;
+        font-size: 16px;
+        font-weight: 700;
+        horizontal-alignment: center;
+    }
+}

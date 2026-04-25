@@ -2,11 +2,7 @@ use defmt::println;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::{Receiver, Watch};
-use embassy_time::{Duration, Timer};
-use esp_hal::{
-    Blocking,
-    i2c::master::{Error, I2c},
-};
+use embassy_time::{Duration, Instant, Timer};
 use max3010x::{AdcRange, SamplingRate};
 use max3010x::{
     Led, LedPulseWidth, Max3010x, SampleAveraging,
@@ -17,12 +13,27 @@ use max3010x::{
 use crate::processor::{
     BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Spo2Calculator,
 };
+use crate::touch::SharedI2cDevice;
+
+// Plotter integration
+#[cfg(feature = "plot")]
+use crate::plotter::PlotMessage;
 
 /// BPM, SpO2, Temp
-static DATA_CHANNEL: Watch<CriticalSectionRawMutex, (f32, f32, f32), 1> = Watch::new();
+static DATA_CHANNEL: Watch<CriticalSectionRawMutex, (f32, f32, f32), 2> = Watch::new();
+
+/// Channel IDs for the plotter (must match registration order)
+#[cfg(feature = "plot")]
+const CH_RAW_RED: u8 = 0;
+#[cfg(feature = "plot")]
+const CH_PRE_DC_RED: u8 = 1;
+#[cfg(feature = "plot")]
+const CH_CLEAN_RED: u8 = 2;
+#[cfg(feature = "plot")]
+const CH_CLEAN_IR: u8 = 3;
 
 pub struct OxymeterRunner {
-    sensor: Max3010x<I2c<'static, Blocking>, Max30102, Oximeter>,
+    sensor: Max3010x<SharedI2cDevice, Max30102, Oximeter>,
 
     // RED Pipeline
     dc_block_red: MovingMeanSubtractor<100>,
@@ -34,22 +45,38 @@ pub struct OxymeterRunner {
 
     bpm_calc: BpmCalculator,
     spo2_calc: Spo2Calculator,
+
+    // Plotter for compact text output
+    #[cfg(feature = "plot")]
+    plot_msg: PlotMessage,
+    // #[cfg(feature = "plot")]
+    // samples_sent: u32,
 }
 
 impl OxymeterRunner {
     pub async fn run(mut self) -> ! {
         let sender = DATA_CHANNEL.sender();
 
+        // Register all plot channels once at startup
+        #[cfg(feature = "plot")]
+        self.send_plot_registration();
+
         loop {
             if self.sensor.get_available_sample_count().unwrap_or(0) == 0 {
-                Timer::after(Duration::from_millis(20)).await;
+                Timer::after(Duration::from_millis(10)).await;
                 continue;
             }
+
+            let chrono = Instant::now().as_micros();
+            let mut read_time = 0u64;
+            let mut sample_count = 0u8;
 
             let mut fifo_buffer = [0u32; 32];
 
             match self.sensor.read_fifo(&mut fifo_buffer) {
                 Ok(samples_read) => {
+                    read_time = Instant::now().as_micros() - chrono;
+                    sample_count = samples_read;
                     for i in 0..(samples_read as usize) {
                         let red = fifo_buffer[i * 2];
                         let ir = fifo_buffer[i * 2 + 1];
@@ -73,13 +100,9 @@ impl OxymeterRunner {
                             dc_mean_ir,
                         );
 
-                        // ---------------------------------
-
-                        // DUMP TO SERIAL FOR PYTHON
-                        println!(
-                            "Raw,{=f32},PreDC,{=f32},CleanRed,{=f32},CleanIr,{=f32}",
-                            raw_red, pre_dc_red, clean_red, clean_ir
-                        );
+                        // Send plot data (only when PLOT feature is enabled)
+                        #[cfg(feature = "plot")]
+                        self.send_plot_data(raw_red, pre_dc_red, clean_red, clean_ir);
 
                         // Feed the ultimate smoothed signal into BPM calc
                         if let Some(new_bpm) = self.bpm_calc.process_sample(clean_red) {
@@ -91,7 +114,58 @@ impl OxymeterRunner {
                     // Handle I2C read errors
                 }
             }
+
+            let elapsed = Instant::now().as_micros() - chrono;
+            println!(
+                "DSP: Samples: {=u8}, Loop: {=u64} us, Read: {=u64} us, Process: {=u64} us",
+                sample_count,
+                elapsed,
+                read_time,
+                elapsed - read_time
+            );
+
+            // Yield to give other I2C tasks (touch) a chance
+            // Timer::after(Duration::from_millis(2)).await;
         }
+    }
+
+    /// Send channel registration messages to the plotter.
+    #[cfg(feature = "plot")]
+    fn send_plot_registration(&mut self) {
+        let msg = self.plot_msg.register(CH_RAW_RED, "RawRed", (0, 200, 0));
+        println!("{}", msg);
+        let msg = self
+            .plot_msg
+            .register(CH_PRE_DC_RED, "PreDC", (200, 200, 0));
+        println!("{}", msg);
+        let msg = self
+            .plot_msg
+            .register(CH_CLEAN_RED, "CleanRed", (0, 100, 255));
+        println!("{}", msg);
+        let msg = self
+            .plot_msg
+            .register(CH_CLEAN_IR, "CleanIR", (255, 100, 0));
+        println!("{}", msg);
+    }
+
+    /// Send data frames for all plotted signals.
+    #[cfg(feature = "plot")]
+    fn send_plot_data(&mut self, raw_red: f32, pre_dc_red: f32, clean_red: f32, clean_ir: f32) {
+        // Only send plot data for every 8th sample (~12.5 Hz effective at 100 Hz sensor)
+        // to avoid saturating the USB serial port
+        // self.samples_sent += 1;
+        // if self.samples_sent % 8 != 0 {
+        //     return;
+        // }
+
+        let msg = self.plot_msg.data(CH_RAW_RED, raw_red);
+        println!("{}", msg);
+        let msg = self.plot_msg.data(CH_PRE_DC_RED, pre_dc_red);
+        println!("{}", msg);
+        let msg = self.plot_msg.data(CH_CLEAN_RED, clean_red);
+        println!("{}", msg);
+        let msg = self.plot_msg.data(CH_CLEAN_IR, clean_ir);
+        println!("{}", msg);
     }
 }
 
@@ -101,11 +175,15 @@ pub async fn acquisition_task(runner: OxymeterRunner) {
 }
 
 pub struct OxymeterHandle {
-    receiver: Receiver<'static, CriticalSectionRawMutex, (f32, f32, f32), 1>,
+    receiver: Receiver<'static, CriticalSectionRawMutex, (f32, f32, f32), 2>,
 }
 
 impl OxymeterHandle {
-    pub async fn start(spawner: &Spawner, i2c: I2c<'static, Blocking>) -> Result<Self, Error> {
+    pub async fn start(
+        spawner: &Spawner,
+        i2c: SharedI2cDevice,
+    ) -> Result<Self, embassy_embedded_hal::shared_bus::I2cDeviceError<esp_hal::i2c::master::Error>>
+    {
         let mut sensor = Max3010x::new_max30102(i2c);
 
         sensor.reset().unwrap();
@@ -130,6 +208,10 @@ impl OxymeterHandle {
             bandpass_ir: FirFilter::new(FIR_COEFFS),
             bpm_calc: BpmCalculator::new(100.0),
             spo2_calc: Spo2Calculator::new(),
+            #[cfg(feature = "plot")]
+            plot_msg: PlotMessage::new(),
+            // #[cfg(feature = "plot")]
+            // samples_sent: 0,
         };
 
         let receiver = DATA_CHANNEL
@@ -158,4 +240,10 @@ impl OxymeterHandle {
     pub fn temp(&mut self) -> f32 {
         self.get_latest_data().2
     }
+}
+
+pub fn vitals_receiver() -> Receiver<'static, CriticalSectionRawMutex, (f32, f32, f32), 2> {
+    DATA_CHANNEL
+        .receiver()
+        .expect("Failed to get additional Watch receiver")
 }

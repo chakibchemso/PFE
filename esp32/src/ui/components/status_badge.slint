@@ -1,0 +1,24 @@
+import { Theme } from "../theme.slint";
+
+/// Small status badge pill (e.g. WiFi On/Off, ASCON/Plain)
+export component StatusBadge inherits Rectangle {
+    in property <string> label: "";
+    in property <bool> active: false;
+    in property <color> active_color: Theme.green;
+
+    width: 68px;
+    height: 22px;
+    border-radius: 11px;
+    background: active ? active_color : Theme.surface0;
+
+    Text {
+        x: 0;
+        y: 4px;
+        width: parent.width;
+        text: label;
+        color: Theme.mantle;
+        font-size: 11px;
+        font-weight: 600;
+        horizontal-alignment: center;
+    }
+}

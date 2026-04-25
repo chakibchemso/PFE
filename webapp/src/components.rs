@@ -224,7 +224,7 @@ pub fn MqttViewer() -> impl IntoView {
                             // BPM Card
                             <div class="bg-ctp-base rounded-xl p-6 border border-ctp-surface shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
                                 <div class="absolute top-0 w-full h-1 bg-ctp-danger"></div>
-                                <span class="text-ctp-danger text-sm font-bold uppercase tracking-wider mb-2">"Heart Rate"</span>
+                                <span class="text-ctp-danger text-sm font-bold uppercase tracking-wider mb-2">"❤️ Heart Rate"</span>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-5xl font-extrabold text-ctp-text tracking-tight">{bpm}</span>
                                     <span class="text-ctp-subtext font-medium ml-1">"bpm"</span>
@@ -234,7 +234,7 @@ pub fn MqttViewer() -> impl IntoView {
                             // SpO2 Card
                             <div class="bg-ctp-base rounded-xl p-6 border border-ctp-surface shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
                                 <div class="absolute top-0 w-full h-1 bg-ctp-primary"></div>
-                                <span class="text-ctp-primary text-sm font-bold uppercase tracking-wider mb-2">"Blood Oxygen"</span>
+                                <span class="text-ctp-primary text-sm font-bold uppercase tracking-wider mb-2">"🩸 Blood Oxygen"</span>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-5xl font-extrabold text-ctp-text tracking-tight">{spo2}</span>
                                     <span class="text-ctp-subtext font-medium ml-1">"%"</span>
@@ -244,7 +244,7 @@ pub fn MqttViewer() -> impl IntoView {
                             // Temp Card
                             <div class="bg-ctp-base rounded-xl p-6 border border-ctp-surface shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
                                 <div class="absolute top-0 w-full h-1 bg-ctp-warning"></div>
-                                <span class="text-ctp-warning text-sm font-bold uppercase tracking-wider mb-2">"Temperature"</span>
+                                <span class="text-ctp-warning text-sm font-bold uppercase tracking-wider mb-2">"🌡️ Temperature"</span>
                                 <div class="flex items-baseline gap-1">
                                     <span class="text-5xl font-extrabold text-ctp-text tracking-tight">{temp}</span>
                                     <span class="text-ctp-subtext font-medium ml-1">"°C"</span>
