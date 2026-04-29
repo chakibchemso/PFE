@@ -1,31 +1,24 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
-
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Ticker};
-use esp_hal::{
-    clock::CpuClock,
-    dma::{DmaRxBuf, DmaTxBuf},
-    dma_descriptors,
-    gpio::{Level, Output, OutputConfig},
-    i2c::master::{Config as I2cConfig, I2c},
-    psram::{FlashFreq, PsramConfig, SpiRamFreq, SpiTimingConfigCoreClock},
-    spi::{
-        Mode,
-        master::{Config as SpiConfig, Spi},
-    },
-    time::Rate,
-    timer::timg::TimerGroup,
-};
+use embassy_net::Config;
+use esp_hal::rng::Rng;
 use esp_radio::Controller;
 use esp32::{
-    DATA_CHANNEL, alloc::vec::Vec, crypto, mk_static, mqtt, oxymeter, touch, ui, utils, wifi,
+    app::{pipeline::pipeline_task, state},
+    crypto,
+    drivers::{
+        display::init_display,
+        sensor::{init_oxymeter, init_touch},
+        touch::SharedI2cBus,
+    },
+    mk_static,
+    system::{board::init_board, init_system},
+    tasks::{mqtt, wifi},
+    ui, utils,
 };
-use lcd_async::options::{ColorInversion, ColorOrder, Orientation};
-use lcd_async::{Builder, interface::SpiInterface, models::ST7796};
 use static_cell::StaticCell;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -33,52 +26,44 @@ getrandom::register_custom_getrandom!(utils::custom_getrandom);
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
-    rtt_target::rtt_init_defmt!();
+    // Initialize system (clocks, heap)
+    let p = init_system();
 
-    // ? Initialize peripherals, clocks, and PSRAM
-    let config = esp_hal::Config::default()
-        .with_cpu_clock(CpuClock::max())
-        .with_psram(PsramConfig {
-            flash_frequency: FlashFreq::FlashFreq80m,
-            ram_frequency: SpiRamFreq::Freq80m,
-            core_clock: Some(SpiTimingConfigCoreClock::SpiTimingConfigCoreClock160m),
-            ..Default::default()
-        });
-    let p = esp_hal::init(config);
+    // Initialize board peripherals (SPI, I2C, display pins)
+    let board_periph = init_board(
+        p.SPI2, p.DMA_CH0, p.I2C0, p.GPIO1, p.GPIO2, p.GPIO8, p.GPIO9, p.GPIO10, p.GPIO11, p.GPIO12,
+    );
 
-    // ? Initialize heap: internal SRAM + PSRAM
+    // Wrap I2C bus in a shared mutex for multiple devices
+    let shared_i2c_bus = mk_static!(
+        SharedI2cBus,
+        SharedI2cBus::new(core::cell::RefCell::new(board_periph.i2c_bus))
+    );
+
+    // Initialize RTOS timer
     {
-        // Internal SRAM heap in regular DRAM.
-        esp_alloc::heap_allocator!(size: 64 * 1024);
-        // Additional SRAM reclaimed from unused ROM sections.
-        esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
-        // PSRAM heap (16MB on ESP32-S3N32R16V)
-        esp_alloc::psram_allocator!(p.PSRAM, esp_hal::psram);
-    }
-
-    // ? Initialize RTOS (required for embassy and radio)
-    {
+        use esp_hal::timer::timg::TimerGroup;
         let timg0 = TimerGroup::new(p.TIMG0);
         esp_rtos::start(timg0.timer0);
     }
 
-    // ? Initialize radio controller
+    // Initialize radio controller
     let rd_ctrl = mk_static!(
         Controller<'static>,
         esp_radio::init().expect("Failed to initialize radio controller")
     );
 
-    // ? Initialize WiFi
+    // Initialize WiFi
     let (wf_ctrl, wf_device) =
         esp_radio::wifi::new(rd_ctrl, p.WIFI, esp_radio::wifi::Config::default())
             .expect("Failed to initialize WiFi control");
 
-    // ? Initialize network stack
+    // Initialize network stack
     let (stack, runner) = {
-        let sta_conf = embassy_net::Config::dhcpv4(Default::default());
+        let sta_conf = Config::dhcpv4(Default::default());
 
         let seed = {
-            let rng = esp_hal::rng::Rng::new();
+            let rng = Rng::new();
             ((rng.random() as u64) << 32) | (rng.random() as u64)
         };
 
@@ -93,7 +78,7 @@ async fn main(spawner: Spawner) -> ! {
         )
     };
 
-    // ? Spawn WiFi and network tasks
+    // Spawn WiFi and network tasks
     {
         spawner.spawn(wifi::connection_task(wf_ctrl)).unwrap();
         spawner.spawn(wifi::net_task(runner)).unwrap();
@@ -107,102 +92,29 @@ async fn main(spawner: Spawner) -> ! {
 
     info!("initialized!");
 
-    // 1. Display SPI configuration
-    let sclk = p.GPIO12;
-    let mosi = p.GPIO11;
-
-    let (rx_descriptors, tx_descriptors) = dma_descriptors!(32000, 32000);
-    let dma_rx_buf = DmaRxBuf::new(rx_descriptors, mk_static!([u8; 32000], [0; 32000])).unwrap();
-    let dma_tx_buf = DmaTxBuf::new(tx_descriptors, mk_static!([u8; 32000], [0; 32000])).unwrap();
-
-    let spi = Spi::new(
-        p.SPI2,
-        SpiConfig::default()
-            .with_frequency(Rate::from_mhz(80))
-            .with_mode(Mode::_0),
+    // Create display (consumes the SPI bus)
+    let display = init_display(
+        board_periph.spi_bus,
+        board_periph.display_dc,
+        board_periph.display_rst,
+        board_periph.display_cs,
     )
-    .expect("Failed to initialize SPI")
-    .with_sck(sclk)
-    .with_mosi(mosi)
-    .with_dma(p.DMA_CH0)
-    .with_buffers(dma_rx_buf, dma_tx_buf)
-    .into_async();
+    .await;
 
-    // 2. Display control pins
-    let dc = Output::new(p.GPIO9, Level::Low, OutputConfig::default());
-    let rst = Output::new(p.GPIO8, Level::Low, OutputConfig::default());
-    let cs = Output::new(p.GPIO10, Level::High, OutputConfig::default());
-
-    // 3. Shared SPI bus for async DMA access (embassy async mutex)
-    let spi_bus = mk_static!(ui::DisplaySpiBus, ui::DisplaySpiBus::new(spi));
-    // Async SpiDevice wrapper for shared bus access
-    let spi_dev = ui::DisplaySpiDevice::new(spi_bus, cs);
-
-    // 4. Initialize the display via lcd-async SpiInterface
-    let di = SpiInterface::new(spi_dev, dc);
-    let mut delay = embassy_time::Delay;
-    let mut display = Builder::new(ST7796, di)
-        .reset_pin(rst)
-        .color_order(ColorOrder::Bgr)
-        .invert_colors(ColorInversion::Inverted)
-        .init(&mut delay)
+    // Initialize sensors (oxymeter + touch) on shared I2C bus
+    let oxymeter = init_oxymeter(&spawner, shared_i2c_bus)
         .await
-        .unwrap();
+        .expect("Failed to initialize oxymeter");
 
-    let render_config = ui::RenderConfig::dev_st7796();
-    let mut display_orientation = Orientation::default();
-    if render_config.display_mirror_x {
-        display_orientation = display_orientation.flip_horizontal();
-    }
-    if render_config.display_mirror_y {
-        display_orientation = display_orientation.flip_vertical();
-    }
-    display.set_orientation(display_orientation).await.unwrap();
-
-    let i2c_bus = {
-        let i2c = I2c::new(
-            p.I2C0,
-            I2cConfig::default().with_frequency(Rate::from_khz(400)),
-        )
-        .expect("Failed to initialize I2C")
-        .with_sda(p.GPIO1)
-        .with_scl(p.GPIO2);
-        mk_static!(
-            touch::SharedI2cBus,
-            touch::SharedI2cBus::new(RefCell::new(i2c))
-        )
-    };
-
-    let touch_i2c_bus = {
-        let i2c = I2c::new(
-            p.I2C1,
-            I2cConfig::default().with_frequency(Rate::from_khz(400)),
-        )
-        .expect("Failed to initialize I2C")
-        .with_sda(p.GPIO40)
-        .with_scl(p.GPIO41);
-        mk_static!(
-            touch::SharedI2cBus,
-            touch::SharedI2cBus::new(RefCell::new(i2c))
-        )
-    };
-
-    let mut oxymeter = {
-        let sensor_i2c = touch::SharedI2cDevice::new(i2c_bus);
-        oxymeter::OxymeterHandle::start(&spawner, sensor_i2c)
-            .await
-            .expect("Failed to initialize oxymeter")
-    };
-
-    let touch = touch::TouchDevice::new(
-        touch::TouchControllerKind::Ft6336,
-        touch::SharedI2cDevice::new(touch_i2c_bus),
-        render_config.panel_width,
-        render_config.panel_height,
+    let touch = init_touch(
+        shared_i2c_bus,
+        ui::RenderConfig::dev_st7796().panel_width,
+        ui::RenderConfig::dev_st7796().panel_height,
     )
     .expect("Failed to initialize touch controller");
 
     // Initialize Slint platform and window
+    let render_config = ui::RenderConfig::dev_st7796();
     let window = ui::init_platform(render_config.viewport_size);
 
     // Create shared window handle for touch_task to dispatch events directly
@@ -223,7 +135,7 @@ async fn main(spawner: Spawner) -> ! {
             display,
             shared_window,
             window,
-            oxymeter::vitals_receiver(),
+            state::vitals_receiver(),
         ))
         .unwrap();
 
@@ -232,67 +144,32 @@ async fn main(spawner: Spawner) -> ! {
         crypto::Ascon::new(key)
     };
 
+    // One-time crypto self-test
+    {
+        let test_data = [0xAAu8; 12];
+        let (ct, nonce) = cipher.encrypt(&test_data);
+        let pt = cipher.decrypt(&ct, &nonce);
+        assert_eq!(&pt[..], &test_data, "crypto self-test failed!");
+        info!("Crypto self-test passed");
+    }
+
     // start mqtt
     spawner.spawn(mqtt::mqtt_task(stack)).unwrap();
 
-    // ! main loop
-    let mut ticker = Ticker::every(Duration::from_millis(1000));
+    // Spawn data pipeline task
+    spawner.spawn(pipeline_task(oxymeter, cipher)).unwrap();
+
+    // Idle loop
+    info!(
+        "System running. Free heap: {} bytes",
+        esp_alloc::HEAP.free()
+    );
     loop {
-        info!("loop start!");
-
-        // ! acquisition
-        // let bpm = oxymeter.read_bpm();
-        // let spo2 = oxymeter.read_spo2();
-        // let temp = oxymeter.read_temp();
-        let bpm = oxymeter.bpm();
-        let spo2 = oxymeter.spo2();
-        let temp = oxymeter.temp();
-        info!("Sensor data: BPM: {}, SPO2: {}, Temp: {}", bpm, spo2, temp);
-
-        // ! fusion
-        let data = {
-            let mut out = [0u8; 12];
-            out[0..4].copy_from_slice(&bpm.to_le_bytes());
-            out[4..8].copy_from_slice(&spo2.to_le_bytes());
-            out[8..12].copy_from_slice(&temp.to_le_bytes());
-            out
-        };
-        info!("Prcrypted data: {}", utils::print_hex(&data).as_str());
-
-        // ! encryption
-        let (ciphertext, nonce) = cipher.encrypt(&data);
-        info!("Encrypted data: {}", utils::print_hex(&ciphertext).as_str());
-
-        // ! transport
-        {
-            let mut payload = Vec::new();
-            payload.extend_from_slice(nonce.as_slice());
-            payload.extend_from_slice(ciphertext.as_slice());
-            DATA_CHANNEL.send(payload).await;
-        }
-
-        // ! decryption
-        let plaintext = cipher.decrypt(&ciphertext, &nonce);
-        info!("Decrypted data: {}", utils::print_hex(&plaintext).as_str());
-
-        // ! parsing
-        let (bpm, spo2, temp) = (
-            f32::from_le_bytes(plaintext[0..4].try_into().unwrap()),
-            f32::from_le_bytes(plaintext[4..8].try_into().unwrap()),
-            f32::from_le_bytes(plaintext[8..12].try_into().unwrap()),
-        );
-        info!("Decrypted: BPM: {}, SPO2: {}, Temp: {}", bpm, spo2, temp);
-
-        assert_eq!(&plaintext, &data);
-
-        // utils::fade_disp_colors(&mut display).await;
-
+        embassy_time::Timer::after_secs(60).await;
         info!(
             "heap: used {} bytes, free {} bytes",
             esp_alloc::HEAP.used(),
             esp_alloc::HEAP.free()
         );
-
-        ticker.next().await;
     }
 }

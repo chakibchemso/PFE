@@ -214,6 +214,6 @@ pub async fn ui_task(
             .transfer_batch(config, &mut display, &changed_rects)
             .await;
 
-        Timer::after(Duration::from_millis(16)).await;
+        Timer::after(Duration::from_millis(0)).await;
     }
 }

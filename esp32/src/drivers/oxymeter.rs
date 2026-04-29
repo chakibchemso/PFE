@@ -1,7 +1,7 @@
 use defmt::println;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::watch::{Receiver, Watch};
+use embassy_sync::watch::Receiver;
 use embassy_time::{Duration, Instant, Timer};
 use max3010x::{AdcRange, SamplingRate};
 use max3010x::{
@@ -9,18 +9,13 @@ use max3010x::{
     marker::{ic::Max30102, mode::Oximeter},
 };
 
-// Brought back your custom DSP structs!
-use crate::processor::{
-    BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Spo2Calculator,
-};
-use crate::touch::SharedI2cDevice;
+use crate::app::state::VITALS_CHANNEL;
+use crate::drivers::touch::SharedI2cDevice;
+use crate::dsp::{BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Spo2Calculator};
 
 // Plotter integration
 #[cfg(feature = "plot")]
 use crate::plotter::PlotMessage;
-
-/// BPM, SpO2, Temp
-static DATA_CHANNEL: Watch<CriticalSectionRawMutex, (f32, f32, f32), 2> = Watch::new();
 
 /// Channel IDs for the plotter (must match registration order)
 #[cfg(feature = "plot")]
@@ -55,7 +50,7 @@ pub struct OxymeterRunner {
 
 impl OxymeterRunner {
     pub async fn run(mut self) -> ! {
-        let sender = DATA_CHANNEL.sender();
+        let sender = VITALS_CHANNEL.sender();
 
         // Register all plot channels once at startup
         #[cfg(feature = "plot")]
@@ -214,7 +209,7 @@ impl OxymeterHandle {
             // samples_sent: 0,
         };
 
-        let receiver = DATA_CHANNEL
+        let receiver = VITALS_CHANNEL
             .receiver()
             .expect("Failed to get Watch receiver");
 
@@ -240,10 +235,4 @@ impl OxymeterHandle {
     pub fn temp(&mut self) -> f32 {
         self.get_latest_data().2
     }
-}
-
-pub fn vitals_receiver() -> Receiver<'static, CriticalSectionRawMutex, (f32, f32, f32), 2> {
-    DATA_CHANNEL
-        .receiver()
-        .expect("Failed to get additional Watch receiver")
 }

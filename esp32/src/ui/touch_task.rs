@@ -5,7 +5,7 @@ use embassy_time::{Duration, Timer};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::platform::{PointerEventButton, WindowEvent};
 
-use crate::touch::TouchDevice;
+use crate::drivers::touch::TouchDevice;
 
 use super::config::RenderConfig;
 

@@ -96,7 +96,7 @@ pub async fn mqtt_task(stack: Stack<'static>) -> ! {
             }
         }
 
-        let receiver = crate::DATA_CHANNEL.receiver();
+        let receiver = crate::app::state::DATA_CHANNEL.receiver();
 
         let topic_name = MqttString::from_str(TOPICNAME).expect("invalid topic name");
         let topic = TopicName::new(topic_name).expect("invalid topic");
