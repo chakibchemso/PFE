@@ -8,11 +8,11 @@ use esp_hal::rng::Rng;
 use esp_radio::Controller;
 use esp32::{
     app::{pipeline::pipeline_task, state},
-    crypto,
+    config, crypto,
     drivers::{
+        bus::SharedI2cBus,
         display::init_display,
         sensor::{init_oxymeter, init_touch},
-        touch::SharedI2cBus,
     },
     mk_static,
     system::{board::init_board, init_system},
@@ -35,10 +35,7 @@ async fn main(spawner: Spawner) -> ! {
     );
 
     // Wrap I2C bus in a shared mutex for multiple devices
-    let shared_i2c_bus = mk_static!(
-        SharedI2cBus,
-        SharedI2cBus::new(core::cell::RefCell::new(board_periph.i2c_bus))
-    );
+    let shared_i2c_bus = mk_static!(SharedI2cBus, SharedI2cBus::new(board_periph.i2c_bus));
 
     // Initialize RTOS timer
     {
@@ -78,19 +75,11 @@ async fn main(spawner: Spawner) -> ! {
         )
     };
 
-    // Spawn WiFi and network tasks
-    {
-        spawner.spawn(wifi::connection_task(wf_ctrl)).unwrap();
-        spawner.spawn(wifi::net_task(runner)).unwrap();
+    // Spawn WiFi and network tasks (non-blocking: OS continues while these connect in background)
+    spawner.spawn(wifi::connection_task(wf_ctrl)).unwrap();
+    spawner.spawn(wifi::net_task(runner)).unwrap();
 
-        info!("Waiting for IP address...");
-        stack.wait_config_up().await;
-
-        let ip_info = stack.config_v4().unwrap();
-        info!("Connected! Got IP: {}", ip_info.address);
-    };
-
-    info!("initialized!");
+    info!("WiFi connecting in background...");
 
     // Create display (consumes the SPI bus)
     let display = init_display(
@@ -111,6 +100,7 @@ async fn main(spawner: Spawner) -> ! {
         ui::RenderConfig::dev_st7796().panel_width,
         ui::RenderConfig::dev_st7796().panel_height,
     )
+    .await
     .expect("Failed to initialize touch controller");
 
     // Initialize Slint platform and window
@@ -139,10 +129,7 @@ async fn main(spawner: Spawner) -> ! {
         ))
         .unwrap();
 
-    let cipher = {
-        let key = b"very secret key!";
-        crypto::Ascon::new(key)
-    };
+    let cipher = crypto::Ascon::new(config::ASCON_KEY);
 
     // One-time crypto self-test
     {

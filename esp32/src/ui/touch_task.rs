@@ -26,7 +26,7 @@ pub async fn touch_task(
     let mut last_position: Option<slint::LogicalPosition> = None;
 
     loop {
-        let result = device.read_touch().ok().flatten();
+        let result = device.read_touch().await.ok().flatten();
 
         // Get window if available (UI task may not have registered it yet)
         let window_opt = {

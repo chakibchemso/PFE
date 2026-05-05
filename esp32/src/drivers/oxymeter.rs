@@ -3,14 +3,14 @@ use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::Receiver;
 use embassy_time::{Duration, Instant, Timer};
-use max3010x::{AdcRange, SamplingRate};
-use max3010x::{
+use max3010x_async::{AdcRange, SamplingRate};
+use max3010x_async::{
     Led, LedPulseWidth, Max3010x, SampleAveraging,
     marker::{ic::Max30102, mode::Oximeter},
 };
 
 use crate::app::state::VITALS_CHANNEL;
-use crate::drivers::touch::SharedI2cDevice;
+use crate::drivers::bus::SharedI2cDevice;
 use crate::dsp::{BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Spo2Calculator};
 
 // Plotter integration
@@ -57,7 +57,7 @@ impl OxymeterRunner {
         self.send_plot_registration();
 
         loop {
-            if self.sensor.get_available_sample_count().unwrap_or(0) == 0 {
+            if self.sensor.get_available_sample_count().await.unwrap_or(0) == 0 {
                 Timer::after(Duration::from_millis(10)).await;
                 continue;
             }
@@ -68,7 +68,7 @@ impl OxymeterRunner {
 
             let mut fifo_buffer = [0u32; 32];
 
-            match self.sensor.read_fifo(&mut fifo_buffer) {
+            match self.sensor.read_fifo(&mut fifo_buffer).await {
                 Ok(samples_read) => {
                     read_time = Instant::now().as_micros() - chrono;
                     sample_count = samples_read;
@@ -181,19 +181,25 @@ impl OxymeterHandle {
     {
         let mut sensor = Max3010x::new_max30102(i2c);
 
-        sensor.reset().unwrap();
+        sensor.reset().await.unwrap();
         Timer::after(Duration::from_millis(100)).await;
 
-        let mut sensor = sensor.into_oximeter().unwrap();
+        let mut sensor = sensor.into_oximeter().await.unwrap();
 
         // 400 SPS with Sa4 = 100 Hz effective sample rate
-        sensor.set_sampling_rate(SamplingRate::Sps400).unwrap();
-        sensor.set_sample_averaging(SampleAveraging::Sa4).unwrap();
-        sensor.set_pulse_amplitude(Led::All, 0x1F).unwrap();
-        sensor.set_pulse_width(LedPulseWidth::Pw411).unwrap();
-        sensor.set_adc_range(AdcRange::Fs4k).unwrap();
-        sensor.enable_fifo_rollover().unwrap();
-        sensor.clear_fifo().unwrap();
+        sensor
+            .set_sampling_rate(SamplingRate::Sps400)
+            .await
+            .unwrap();
+        sensor
+            .set_sample_averaging(SampleAveraging::Sa4)
+            .await
+            .unwrap();
+        sensor.set_pulse_amplitude(Led::All, 0x1F).await.unwrap();
+        sensor.set_pulse_width(LedPulseWidth::Pw411).await.unwrap();
+        sensor.set_adc_range(AdcRange::Fs4k).await.unwrap();
+        sensor.enable_fifo_rollover().await.unwrap();
+        sensor.clear_fifo().await.unwrap();
 
         let runner = OxymeterRunner {
             sensor,

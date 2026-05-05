@@ -25,3 +25,6 @@ target/
 
 # Ignore .DS_Store file in mac
 **/.DS_Store
+
+# Secret credentials — copy from config.example.rs
+/src/config.rs

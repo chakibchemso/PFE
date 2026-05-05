@@ -12,6 +12,7 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, PhysicalRegion, 
 use super::config::{RenderConfig, RoundMaskLUT};
 use super::widgets::watchface;
 use super::{SmartWatchDisplay, SmartWatchUI};
+use crate::app::state::wifi_receiver;
 
 /// Shared window handle for the touch task to dispatch events
 pub type SharedWindow = Mutex<CriticalSectionRawMutex, RefCell<Option<Rc<MinimalSoftwareWindow>>>>;
@@ -169,7 +170,7 @@ pub async fn ui_task(
     ui.set_spo2(slint::format!("--"));
     ui.set_hour_angle(0.);
     ui.set_minute_angle(0.);
-    ui.set_wifi_connected(true);
+    ui.set_wifi_connected(false);
     ui.set_ascon_secure(true);
     ui.set_gps_fix(false);
     ui.set_dark_mode(true);
@@ -184,10 +185,17 @@ pub async fn ui_task(
         guard.replace(Some(window.clone()));
     }
 
+    let mut wifi_receiver = wifi_receiver();
+
     let mut clock_state: Option<watchface::ClockState> = None;
     let start_ms = Instant::now().as_millis();
 
     loop {
+        // Update WiFi status
+        if let Some(connected) = wifi_receiver.try_changed() {
+            ui.set_wifi_connected(connected);
+        }
+
         // Update clock via extracted widget logic
         let elapsed_seconds = ((Instant::now().as_millis() - start_ms) / 1000) as u32;
         if let Some(state) = watchface::tick(elapsed_seconds, clock_state.as_ref()) {

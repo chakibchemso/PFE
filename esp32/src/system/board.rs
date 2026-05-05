@@ -2,7 +2,7 @@
 //! Swap a display or change pins? Edit this file.
 
 use esp_hal::{
-    Async, Blocking,
+    Async,
     dma::{DmaRxBuf, DmaTxBuf},
     dma_descriptors,
     gpio::{Level, Output, OutputConfig},
@@ -30,7 +30,7 @@ pub const I2C_FREQ_KHZ: u32 = 400;
 
 /// Initialized board peripherals
 pub struct BoardPeripherals {
-    pub i2c_bus: I2c<'static, Blocking>,
+    pub i2c_bus: I2c<'static, Async>,
     pub spi_bus: SpiDmaBus<'static, Async>,
     pub display_dc: Output<'static>,
     pub display_rst: Output<'static>,
@@ -97,7 +97,8 @@ pub fn init_board(
     )
     .expect("Failed to initialize I2C")
     .with_sda(gpio1)
-    .with_scl(gpio2);
+    .with_scl(gpio2)
+    .into_async();
 
     BoardPeripherals {
         i2c_bus,

@@ -1,0 +1,8 @@
+[package]
+name = "max3010x-async"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+embedded-hal-async = "1.0.0"
+nb = "1.1.0"

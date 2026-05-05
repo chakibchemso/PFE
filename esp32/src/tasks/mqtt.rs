@@ -1,4 +1,3 @@
-use alloc::borrow::ToOwned;
 use core::num::NonZeroU16;
 use embassy_net::{Stack, dns::DnsQueryType, tcp::TcpSocket};
 use embassy_time::{Duration, Timer};
@@ -13,43 +12,61 @@ use rust_mqtt::{
     types::{MqttString, QoS, TopicName},
 };
 
+use crate::config;
+
 const MAX_SUBSCRIBES: usize = 5;
 const RECEIVE_MAXIMUM: usize = 5;
 const SEND_MAXIMUM: usize = 5;
 const MAX_SUBSCRIPTION_IDENTIFIERS: usize = 0;
 const BUFFER_CAPACITY: usize = 8192;
 
-const SERVERNAME: &str = "mqtt.flespi.io";
-const SERVERPORT: u16 = 1883;
-const USERNAME: &str = "u2cA97FbFg4JdXfDkr8urhiFPAkeBnHj9cBicV8gAvWy3VgbdgT8BtqlGDzMl34K";
-const CLIENTNAME: &str = "chakibchemso-esp32-0x03";
-const TOPICNAME: &str = "chakibchemso/esp32/data";
+const BACKOFF_INITIAL_MS: u64 = 1_000;
+const BACKOFF_MAX_MS: u64 = 60_000;
 
 #[embassy_executor::task]
 pub async fn mqtt_task(stack: Stack<'static>) -> ! {
+    let mut backoff_ms = BACKOFF_INITIAL_MS;
+
     loop {
-        Timer::after(Duration::from_secs(1)).await;
+        // Wait until the network stack has an IP address (non-blocking at startup)
+        stack.wait_config_up().await;
 
         // 1. Setup TCP Socket
         let mut rx_buffer = [0; 1024];
         let mut tx_buffer = [0; 1024];
         let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
 
-        // 2. Connect TCP to HiveMQ Public Broker
-        // let broker_ip = Ipv4Addr::new(54, 36, 178, 49);
-        // let broker_ip = Ipv4Addr::new(52, 57, 154, 90);
-        let broker_ip = stack
-            .dns_query(SERVERNAME, DnsQueryType::A)
-            .await
-            .expect("DNS query failed")
-            .first()
-            .expect("No IP found")
-            .to_owned();
+        // 2. Resolve broker hostname
+        let broker_ip = match stack.dns_query(config::MQTT_HOST, DnsQueryType::A).await {
+            Ok(addrs) => addrs.first().copied(),
+            Err(e) => {
+                defmt::warn!("DNS query failed: {:?}", e);
+                Timer::after(Duration::from_millis(backoff_ms)).await;
+                backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
+                continue;
+            }
+        };
 
-        defmt::info!("Connecting TCP...");
+        let broker_ip = match broker_ip {
+            Some(ip) => ip,
+            None => {
+                defmt::warn!("No IP found for {}", config::MQTT_HOST);
+                Timer::after(Duration::from_millis(backoff_ms)).await;
+                backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
+                continue;
+            }
+        };
 
-        if let Err(e) = socket.connect((broker_ip, SERVERPORT)).await {
+        defmt::info!(
+            "Connecting TCP to {}:{}...",
+            config::MQTT_HOST,
+            config::MQTT_PORT
+        );
+
+        if let Err(e) = socket.connect((broker_ip, config::MQTT_PORT)).await {
             defmt::warn!("TCP Connect failed: {:?}", e);
+            Timer::after(Duration::from_millis(backoff_ms)).await;
+            backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
             continue;
         }
 
@@ -72,18 +89,19 @@ pub async fn mqtt_task(stack: Stack<'static>) -> ! {
             clean_start: true,
             keep_alive: KeepAlive::Seconds(NonZeroU16::new(60).unwrap()),
             session_expiry_interval: SessionExpiryInterval::EndOnDisconnect,
-            // user_name: Some(MqttString::from_str("chakibchemso").unwrap()),
-            user_name: Some(MqttString::from_str(USERNAME).unwrap()),
+            user_name: Some(MqttString::from_str(config::MQTT_USERNAME).unwrap()),
             password: None,
             will: None,
             ..Default::default()
         };
 
         // 5. Connect to MQTT Broker
-        let client_id = match MqttString::from_str(CLIENTNAME) {
+        let client_id = match MqttString::from_str(config::MQTT_CLIENT_ID) {
             Ok(id) => Some(id),
             Err(_) => {
                 defmt::error!("Failed to create client ID - string too long");
+                Timer::after(Duration::from_millis(backoff_ms)).await;
+                backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
                 continue;
             }
         };
@@ -92,13 +110,18 @@ pub async fn mqtt_task(stack: Stack<'static>) -> ! {
             Ok(_) => defmt::info!("MQTT Connected!"),
             Err(_e) => {
                 defmt::error!("MQTT Connection failed");
+                Timer::after(Duration::from_millis(backoff_ms)).await;
+                backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
                 continue;
             }
         }
 
+        // Reset backoff on successful connection
+        backoff_ms = BACKOFF_INITIAL_MS;
+
         let receiver = crate::app::state::DATA_CHANNEL.receiver();
 
-        let topic_name = MqttString::from_str(TOPICNAME).expect("invalid topic name");
+        let topic_name = MqttString::from_str(config::MQTT_TOPIC).expect("invalid topic name");
         let topic = TopicName::new(topic_name).expect("invalid topic");
         let pub_options = PublicationOptions::new(TopicReference::Name(topic)).qos(QoS::AtMostOnce);
 

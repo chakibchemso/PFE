@@ -38,17 +38,22 @@ rust-mqtt = { version = "0.5", default-features = false, features = [
 # ui
 embedded-graphics = "0.8"
 slint = { version = "1.16", default-features = false, features = [
-    "unsafe-single-threaded",
-    "compat-1-2",
-    "libm",
-    "renderer-software",
+  "unsafe-single-threaded",
+  "compat-1-2",
+  "libm",
+  "renderer-software",
 ] }
 
 # ! ### espressif crates ###
 # provides the bootloader and app description for flashing
 esp-bootloader-esp-idf = { version = "0.4.0", features = ["defmt", "esp32s3"] }
 # provides the HAL impl for the ESP32
-esp-hal = { version = "~1.0", features = ["defmt", "esp32s3", "unstable", "psram"] }
+esp-hal = { version = "~1.0", features = [
+  "defmt",
+  "esp32s3",
+  "unstable",
+  "psram",
+] }
 # provides heap mem allocation for the ESP32
 esp-alloc = { version = "0.9.0", features = ["defmt"] }
 # provides async runtime, alloc, and radio support
@@ -94,9 +99,9 @@ embassy-net = { version = "0.9", features = [
   "dns",
   "proto-ipv4",
 ] }
-# TODO
-embassy-sync = { version = "0.7", features = ["defmt"] }
-embassy-embedded-hal = "0.5"
+embassy-sync = { version = "0.8", features = ["defmt"] }
+embassy-embedded-hal = "0.6.0"
+embedded-hal-async = "1.0.0"
 
 
 # ! ### networking crates ###
@@ -124,7 +129,7 @@ smoltcp = { version = "0.12", default-features = false, features = [
 display-interface = "0.5"
 display-interface-spi = "0.5"
 # The Specific Drivers
-lcd-async = "0.1"  # Async fork of mipidsi - handles ST7796 with async SPI
+lcd-async = "0.1" # Async fork of mipidsi - handles ST7796 with async SPI
 ft6x36 = "0.6"    # Driver for your FT6336U touch chip
 
 # ! ### utility crates ###
@@ -133,6 +138,8 @@ critical-section = "1.2.0"
 # fucking self explanatory
 static_cell = "2.1.1"
 libm = "0.2.16"
+nb = "1.1.0"
+max3010x-async = { version = "0.1.0", path = "../crates/max3010x-async" }
 # TODO: why? just why!
 # embedded-io = { version = "0.7.1", features = ["defmt"] }
 # embedded-io-async = { version = "0.7.0", features = ["defmt"] }

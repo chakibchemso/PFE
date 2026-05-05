@@ -1,5 +1,6 @@
 #![no_std]
 pub mod app;
+pub mod config;
 pub mod crypto;
 pub mod drivers;
 pub mod dsp;
