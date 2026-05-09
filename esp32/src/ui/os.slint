@@ -30,8 +30,8 @@ component FPSOverlay inherits Rectangle {
         }
     }
 
-    x: 320px / 2 - 34px;
-    y: 320px - 20px;
+    x: (466px - 68px) / 2;
+    y: 466px - 20px;
     width: 68px;
     height: 16px;
     border-radius: 8px;
@@ -60,8 +60,8 @@ component FPSOverlay inherits Rectangle {
 }
 
 export component SmartWatchUI inherits Window {
-    width: 320px;
-    height: 320px;
+    width: 466px;
+    height: 466px;
     background: Theme.base;
 
     in property <string> time: "--:--";
@@ -80,7 +80,7 @@ export component SmartWatchUI inherits Window {
     property <int> _prev_page: 1;
     property <length> drag_offset: 0px;
     property <bool> dragging: false;
-    property <length> slide_x: -320px;
+    property <length> slide_x: -466px;
 
     // Snap animation duration: 0ms while dragging (instant), 250ms when released
     property <duration> snap_duration: 250ms;
@@ -92,7 +92,7 @@ export component SmartWatchUI inherits Window {
 
     changed active_page => {
         if (root.active_page != root._prev_page) {
-            root.slide_x = 0px - root.active_page * 320px;
+            root.slide_x = 0px - root.active_page * root.width;
             root._prev_page = root.active_page;
         }
     }
@@ -111,7 +111,7 @@ export component SmartWatchUI inherits Window {
                 root.drag_offset = dx;
                 // Disable animation during drag for instant finger following
                 root.snap_duration = 0ms;
-                root.slide_x = 0px - root.active_page * 320px + dx;
+                root.slide_x = 0px - root.active_page * root.width + dx;
             }
         }
 
@@ -121,14 +121,14 @@ export component SmartWatchUI inherits Window {
                     // Re-enable animation for snap
                     root.snap_duration = 250ms;
                     // Snap to nearest page based on drag offset
-                    let threshold = 320px / 3;
+                    let threshold = root.width / 3;
                     if (root.drag_offset < -threshold && root.active_page < 4) {
                         root.active_page += 1;
                     } else if (root.drag_offset > threshold && root.active_page > 0) {
                         root.active_page -= 1;
                     } else {
                         // Snap back to current page
-                        root.slide_x = 0px - root.active_page * 320px;
+                        root.slide_x = 0px - root.active_page * root.width;
                     }
                 }
                 root.dragging = false;
@@ -150,7 +150,7 @@ export component SmartWatchUI inherits Window {
         }
 
         WatchfacePage {
-            x: 320px;
+            x: 466px;
             width: root.width;
             height: root.height;
             time: root.time;
@@ -162,7 +162,7 @@ export component SmartWatchUI inherits Window {
         }
 
         OxymeterPage {
-            x: 640px;
+            x: 932px;
             width: root.width;
             height: root.height;
             bpm: root.bpm;
@@ -170,13 +170,13 @@ export component SmartWatchUI inherits Window {
         }
 
         EcgPage {
-            x: 960px;
+            x: 1398px;
             width: root.width;
             height: root.height;
         }
 
         GpsPage {
-            x: 1280px;
+            x: 1864px;
             width: root.width;
             height: root.height;
             gps_fix: root.gps_fix;

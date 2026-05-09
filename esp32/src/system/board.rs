@@ -1,69 +1,104 @@
 //! Board-level hardware configuration: pin mappings, SPI/I2C ports, DMA channels.
-//! Swap a display or change pins? Edit this file.
+//!
+//! # Production Board (PicoPump v1)
+//!
+//! ## AMOLED Display (QSPI, CO5300)
+//! | Signal    | GPIO  |
+//! |-----------|-------|
+//! | LCD_CS    | GPIO12|
+//! | QSPI_SCLK | GPIO38|
+//! | QSPI_SIO0 | GPIO4 |
+//! | QSPI_SIO1 | GPIO5 |
+//! | QSPI_SIO2 | GPIO6 |
+//! | QSPI_SIO3 | GPIO7 |
+//! | LCD_TE    | GPIO13|
+//! | LCD_RST   | GPIO39|
+//!
+//! ## Touch Panel (I2C, CST9217)
+//! | Signal  | GPIO  |
+//! |---------|-------|
+//! | TP_SDA  | GPIO15|
+//! | TP_SCL  | GPIO14|
+//! | TP_INT  | GPIO11|
+//! | TP_RST  | GPIO40|
 
 use esp_hal::{
     Async,
     dma::{DmaRxBuf, DmaTxBuf},
     dma_descriptors,
-    gpio::{Level, Output, OutputConfig},
+    gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
     i2c::master::{Config as I2cConfig, I2c},
     peripherals,
-    spi::{
-        Mode,
-        master::{Config as SpiConfig, SpiDmaBus},
-    },
+    spi::master::{Config as SpiConfig, Spi, SpiDmaBus},
     time::Rate,
 };
-use static_cell::StaticCell;
 
 use crate::mk_static;
+use static_cell::StaticCell;
 
-/// under 19bit max, divisible by 4(spi) and 32(cache). max is 32736
+/// DMA buffer size for SPI transfers (under 19-bit max, divisible by 4 and 32).
+// pub const SPI_DMA_RX_SIZE: usize = 32736;
+// pub const SPI_DMA_TX_SIZE: usize = 32736;
 pub const SPI_DMA_RX_SIZE: usize = 32736;
 pub const SPI_DMA_TX_SIZE: usize = 32736;
 
-/// SPI clock frequency (80 MHz for ST7796)
-pub const SPI_FREQ_MHZ: u32 = 80;
+/// SPI clock frequency (40 MHz — safe for CO5300 init; can bump to 80 MHz later)
+pub const SPI_FREQ_MHZ: u32 = 40;
 
 /// I2C clock frequency (400 kHz standard)
 pub const I2C_FREQ_KHZ: u32 = 400;
 
-/// Initialized board peripherals
+/// Initialized board peripherals for the production board
 pub struct BoardPeripherals {
     pub i2c_bus: I2c<'static, Async>,
-    pub spi_bus: SpiDmaBus<'static, Async>,
-    pub display_dc: Output<'static>,
-    pub display_rst: Output<'static>,
+    pub qspi_bus: SpiDmaBus<'static, Async>,
     pub display_cs: Output<'static>,
+    pub display_rst: Output<'static>,
+    pub display_te: Input<'static>,
+    pub touch_rst: Output<'static>,
+    pub touch_int: Input<'static>,
 }
 
-/// Initialize board-level peripherals for the dev ST7796 board.
+/// Initialize board-level peripherals for the production CO5300/CST9217 board.
 ///
-/// Consumed peripherals (documented to avoid accidental partial-move errors):
-/// - SPI2, DMA_CH0: SPI display bus with DMA
-/// - I2C0: shared bus for sensors, touch, and future I2C devices
-/// - GPIO1, GPIO2: I2C SDA/SCL
-/// - GPIO8, GPIO9, GPIO10: display RST, DC, CS
-/// - GPIO11, GPIO12: SPI MOSI, SCK
+/// ## Consumed peripherals
+/// - SPI2, DMA_CH0: QSPI display bus with DMA
+/// - I2C0: shared bus for touch and sensors
+/// - GPIO14, GPIO15: I2C SCL/SDA
+/// - GPIO4, GPIO5, GPIO6, GPIO7, GPIO12, GPIO38: QSPI data/control
+/// - GPIO13: display TE (tearing effect / VSYNC input)
+/// - GPIO39: display reset
+/// - GPIO11, GPIO40: touch INT and reset
 #[allow(clippy::too_many_arguments)]
 pub fn init_board(
     spi2: peripherals::SPI2<'static>,
     dma_ch0: peripherals::DMA_CH0<'static>,
     i2c0: peripherals::I2C0<'static>,
-    gpio1: peripherals::GPIO1<'static>,
-    gpio2: peripherals::GPIO2<'static>,
-    gpio8: peripherals::GPIO8<'static>,
-    gpio9: peripherals::GPIO9<'static>,
-    gpio10: peripherals::GPIO10<'static>,
+    gpio4: peripherals::GPIO4<'static>,
+    gpio5: peripherals::GPIO5<'static>,
+    gpio6: peripherals::GPIO6<'static>,
+    gpio7: peripherals::GPIO7<'static>,
     gpio11: peripherals::GPIO11<'static>,
     gpio12: peripherals::GPIO12<'static>,
+    gpio13: peripherals::GPIO13<'static>,
+    gpio14: peripherals::GPIO14<'static>,
+    gpio15: peripherals::GPIO15<'static>,
+    gpio38: peripherals::GPIO38<'static>,
+    gpio39: peripherals::GPIO39<'static>,
+    gpio40: peripherals::GPIO40<'static>,
 ) -> BoardPeripherals {
-    // Display control pins
-    let display_dc = Output::new(gpio9, Level::Low, OutputConfig::default());
-    let display_rst = Output::new(gpio8, Level::Low, OutputConfig::default());
-    let display_cs = Output::new(gpio10, Level::High, OutputConfig::default());
+    // --- Display control pins ---
+    let display_cs = Output::new(gpio12, Level::High, OutputConfig::default());
+    let display_rst = Output::new(gpio39, Level::Low, OutputConfig::default());
 
-    // SPI setup
+    // TE pin: input with pull-down; display drives this high at VSYNC start
+    let display_te = Input::new(gpio13, InputConfig::default().with_pull(Pull::Down));
+
+    // --- Touch control pins ---
+    let touch_rst = Output::new(gpio40, Level::Low, OutputConfig::default());
+    let touch_int = Input::new(gpio11, InputConfig::default().with_pull(Pull::Up));
+
+    // --- QSPI setup (SPI2 with quad I/O lines) ---
     let (rx_descriptors, tx_descriptors) = dma_descriptors!(SPI_DMA_RX_SIZE, SPI_DMA_TX_SIZE);
     let dma_rx_buf = DmaRxBuf::new(
         rx_descriptors,
@@ -77,34 +112,39 @@ pub fn init_board(
     )
     .unwrap();
 
-    let spi_bus = esp_hal::spi::master::Spi::new(
+    let qspi_bus = Spi::new(
         spi2,
         SpiConfig::default()
             .with_frequency(Rate::from_mhz(SPI_FREQ_MHZ))
-            .with_mode(Mode::_0),
+            .with_mode(esp_hal::spi::Mode::_0),
     )
-    .expect("Failed to initialize SPI")
-    .with_sck(gpio12)
-    .with_mosi(gpio11)
+    .expect("Failed to initialize QSPI")
+    .with_sck(gpio38)
+    .with_sio0(gpio4) // SIO0
+    .with_sio1(gpio5) // SIO1
+    .with_sio2(gpio6) // SIO2
+    .with_sio3(gpio7) // SIO3
     .with_dma(dma_ch0)
     .with_buffers(dma_rx_buf, dma_tx_buf)
     .into_async();
 
-    // I2C setup — single shared bus for all I2C devices
+    // --- I2C setup (shared bus for touch + sensors) ---
     let i2c_bus = I2c::new(
         i2c0,
         I2cConfig::default().with_frequency(Rate::from_khz(I2C_FREQ_KHZ)),
     )
     .expect("Failed to initialize I2C")
-    .with_sda(gpio1)
-    .with_scl(gpio2)
+    .with_sda(gpio15)
+    .with_scl(gpio14)
     .into_async();
 
     BoardPeripherals {
         i2c_bus,
-        spi_bus,
-        display_dc,
-        display_rst,
+        qspi_bus,
         display_cs,
+        display_rst,
+        display_te,
+        touch_rst,
+        touch_int,
     }
 }

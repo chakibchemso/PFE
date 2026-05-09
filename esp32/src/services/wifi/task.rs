@@ -1,14 +1,18 @@
 use defmt::info;
 use embassy_net::Runner;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::watch::Sender;
 use embassy_time::{Duration, Timer};
 use esp_radio::wifi::{ClientConfig, WifiController, WifiDevice, WifiEvent};
 
-use crate::app::state::WIFI_STATUS;
 use crate::config;
 
 /// Background task that drives the WiFi hardware connection
 #[embassy_executor::task]
-pub async fn connection_task(mut controller: WifiController<'static>) {
+pub async fn connection_task(
+    mut controller: WifiController<'static>,
+    wifi_sender: Sender<'static, CriticalSectionRawMutex, bool, 2>,
+) {
     info!("Starting WiFi connection task...");
 
     let client_config = esp_radio::wifi::ModeConfig::Client(
@@ -20,8 +24,6 @@ pub async fn connection_task(mut controller: WifiController<'static>) {
     controller.set_config(&client_config).unwrap();
     controller.start_async().await.unwrap();
     info!("WiFi Driver started!");
-
-    let wifi_sender = WIFI_STATUS.sender();
 
     loop {
         match controller.connect_async().await {

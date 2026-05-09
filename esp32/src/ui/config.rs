@@ -1,6 +1,7 @@
 use slint::LogicalPosition;
 
-use crate::ui::PRODUCTION_UI_SIZE;
+/// Production display size (466x466 round AMOLED)
+pub const PRODUCTION_UI_SIZE: u16 = 466;
 
 /// Maximum supported viewport size for mask LUT
 const MAX_MASK_SIZE: usize = 466;
@@ -65,25 +66,8 @@ pub struct RenderConfig {
 }
 
 impl RenderConfig {
-    /// Config for dev boards with ST7796 (320x480, centered 320x320 viewport)
-    pub const fn dev_st7796() -> Self {
-        Self {
-            panel_width: 320,
-            panel_height: 480,
-            viewport_size: 320,
-            viewport_offset_x: 0,
-            viewport_offset_y: 80,
-            round_mask: true,
-            display_mirror_x: false,
-            display_mirror_y: true,
-            touch_mirror_x: true,
-            touch_mirror_y: true,
-            touch_swap_xy: false,
-        }
-    }
-
-    /// Config for production round display (466x466)
-    pub const fn production_round() -> Self {
+    /// Config for the production round CO5300 display (466x466, no panel offset)
+    pub const fn production() -> Self {
         Self {
             panel_width: PRODUCTION_UI_SIZE,
             panel_height: PRODUCTION_UI_SIZE,
@@ -93,8 +77,8 @@ impl RenderConfig {
             round_mask: true,
             display_mirror_x: false,
             display_mirror_y: false,
-            touch_mirror_x: false,
-            touch_mirror_y: false,
+            touch_mirror_x: true,
+            touch_mirror_y: true,
             touch_swap_xy: false,
         }
     }

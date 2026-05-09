@@ -1,5 +1,8 @@
+use alloc::vec::Vec;
 use core::num::NonZeroU16;
 use embassy_net::{Stack, dns::DnsQueryType, tcp::TcpSocket};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Receiver;
 use embassy_time::{Duration, Timer};
 use rust_mqtt::{
     Bytes,
@@ -24,7 +27,10 @@ const BACKOFF_INITIAL_MS: u64 = 1_000;
 const BACKOFF_MAX_MS: u64 = 60_000;
 
 #[embassy_executor::task]
-pub async fn mqtt_task(stack: Stack<'static>) -> ! {
+pub async fn mqtt_task(
+    stack: Stack<'static>,
+    data_receiver: Receiver<'static, CriticalSectionRawMutex, Vec<u8>, 5>,
+) -> ! {
     let mut backoff_ms = BACKOFF_INITIAL_MS;
 
     loop {
@@ -119,15 +125,13 @@ pub async fn mqtt_task(stack: Stack<'static>) -> ! {
         // Reset backoff on successful connection
         backoff_ms = BACKOFF_INITIAL_MS;
 
-        let receiver = crate::app::state::DATA_CHANNEL.receiver();
-
         let topic_name = MqttString::from_str(config::MQTT_TOPIC).expect("invalid topic name");
         let topic = TopicName::new(topic_name).expect("invalid topic");
         let pub_options = PublicationOptions::new(TopicReference::Name(topic)).qos(QoS::AtMostOnce);
 
         // 6. Main Loop - handle data publishing
         loop {
-            if let Ok(data) = receiver.try_receive() {
+            if let Ok(data) = data_receiver.try_receive() {
                 defmt::info!("Publishing {} bytes...", data.len());
                 let message_bytes = Bytes::Borrowed(&data);
 

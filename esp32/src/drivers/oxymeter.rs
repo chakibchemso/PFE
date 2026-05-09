@@ -1,7 +1,7 @@
 use defmt::println;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::watch::Receiver;
+use embassy_sync::watch::Sender;
 use embassy_time::{Duration, Instant, Timer};
 use max3010x_async::{AdcRange, SamplingRate};
 use max3010x_async::{
@@ -9,7 +9,6 @@ use max3010x_async::{
     marker::{ic::Max30102, mode::Oximeter},
 };
 
-use crate::app::state::VITALS_CHANNEL;
 use crate::drivers::bus::SharedI2cDevice;
 use crate::dsp::{BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Spo2Calculator};
 
@@ -49,9 +48,10 @@ pub struct OxymeterRunner {
 }
 
 impl OxymeterRunner {
-    pub async fn run(mut self) -> ! {
-        let sender = VITALS_CHANNEL.sender();
-
+    pub async fn run(
+        mut self,
+        sender: Sender<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
+    ) -> ! {
         // Register all plot channels once at startup
         #[cfg(feature = "plot")]
         self.send_plot_registration();
@@ -101,7 +101,7 @@ impl OxymeterRunner {
 
                         // Feed the ultimate smoothed signal into BPM calc
                         if let Some(new_bpm) = self.bpm_calc.process_sample(clean_red) {
-                            sender.send((new_bpm, current_spo2, 36.0));
+                            sender.send((new_bpm as u8, current_spo2 as u8, 36u8));
                         }
                     }
                 }
@@ -165,18 +165,20 @@ impl OxymeterRunner {
 }
 
 #[embassy_executor::task]
-pub async fn acquisition_task(runner: OxymeterRunner) {
-    runner.run().await;
+pub async fn acquisition_task(
+    runner: OxymeterRunner,
+    sender: Sender<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
+) {
+    runner.run(sender).await;
 }
 
-pub struct OxymeterHandle {
-    receiver: Receiver<'static, CriticalSectionRawMutex, (f32, f32, f32), 2>,
-}
+pub struct OxymeterHandle;
 
 impl OxymeterHandle {
     pub async fn start(
         spawner: &Spawner,
         i2c: SharedI2cDevice,
+        sender: Sender<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
     ) -> Result<Self, embassy_embedded_hal::shared_bus::I2cDeviceError<esp_hal::i2c::master::Error>>
     {
         let mut sensor = Max3010x::new_max30102(i2c);
@@ -215,30 +217,10 @@ impl OxymeterHandle {
             // samples_sent: 0,
         };
 
-        let receiver = VITALS_CHANNEL
-            .receiver()
-            .expect("Failed to get Watch receiver");
-
         spawner
-            .spawn(acquisition_task(runner))
+            .spawn(acquisition_task(runner, sender))
             .expect("Task queue full");
 
-        Ok(Self { receiver })
-    }
-
-    fn get_latest_data(&mut self) -> (f32, f32, f32) {
-        self.receiver.try_get().unwrap_or_default()
-    }
-
-    pub fn bpm(&mut self) -> f32 {
-        self.get_latest_data().0
-    }
-
-    pub fn spo2(&mut self) -> f32 {
-        self.get_latest_data().1
-    }
-
-    pub fn temp(&mut self) -> f32 {
-        self.get_latest_data().2
+        Ok(Self {})
     }
 }

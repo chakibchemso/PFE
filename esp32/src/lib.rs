@@ -5,8 +5,8 @@ pub mod crypto;
 pub mod drivers;
 pub mod dsp;
 pub mod plotter;
+pub mod services;
 pub mod system;
-pub mod tasks;
 pub mod ui;
 pub mod utils;
 

@@ -102,8 +102,8 @@ pub fn MqttViewer() -> impl IntoView {
                         log!("size: {}", bytes.len());
 
                         // Client-side decryption using the initialized cipher
-                        if bytes.len() == 44 {
-                            let (nonce, cypher) = (&bytes[0..16], &bytes[16..44]);
+                        if bytes.len() == 36 {
+                            let (nonce, cypher) = (&bytes[0..16], &bytes[16..36]);
                             if let Some(plain_bytes) = crypto::Ascon::decrypt_cached(
                                 cypher,
                                 <&[u8; 16]>::try_from(nonce).unwrap(),
@@ -112,16 +112,13 @@ pub fn MqttViewer() -> impl IntoView {
 
                                 log!("decrypted: {:?}", plain_bytes);
 
-                                if plain_bytes.len() == 12 {
-                                    let (bpm_val, spo2_val, temp_val) = (
-                                        f32::from_le_bytes(plain_bytes[0..4].try_into().unwrap()),
-                                        f32::from_le_bytes(plain_bytes[4..8].try_into().unwrap()),
-                                        f32::from_le_bytes(plain_bytes[8..12].try_into().unwrap()),
+                                if plain_bytes.len() == 4 {
+                                    let packed = u32::from_le_bytes(
+                                        plain_bytes[0..4].try_into().unwrap(),
                                     );
-
-                                    set_bpm.set(bpm_val as i32);
-                                    set_spo2.set(spo2_val as i32);
-                                    set_temp.set(temp_val as i32);
+                                    set_bpm.set((packed as u8) as i32);
+                                    set_spo2.set(((packed >> 8) as u8) as i32);
+                                    set_temp.set(((packed >> 16) as u8) as i32);
                                 }
                             } else {
                                 set_error_message

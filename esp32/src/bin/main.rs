@@ -7,16 +7,12 @@ use embassy_net::Config;
 use esp_hal::rng::Rng;
 use esp_radio::Controller;
 use esp32::{
-    app::{pipeline::pipeline_task, state},
+    app::bus::SystemBus,
     config, crypto,
-    drivers::{
-        bus::SharedI2cBus,
-        display::init_display,
-        sensor::{init_oxymeter, init_touch},
-    },
+    drivers::bus::SharedI2cBus,
     mk_static,
+    services::{self, storage::StorageService},
     system::{board::init_board, init_system},
-    tasks::{mqtt, wifi},
     ui, utils,
 };
 use static_cell::StaticCell;
@@ -29,10 +25,23 @@ async fn main(spawner: Spawner) -> ! {
     // Initialize system (clocks, heap)
     let p = init_system();
 
-    // Initialize board peripherals (SPI, I2C, display pins)
-    let board_periph = init_board(
-        p.SPI2, p.DMA_CH0, p.I2C0, p.GPIO1, p.GPIO2, p.GPIO8, p.GPIO9, p.GPIO10, p.GPIO11, p.GPIO12,
+    // Create the System Bus — central IPC manifest for all services
+    let bus = mk_static!(SystemBus, SystemBus::new());
+
+    // Initialize board peripherals — production QSPI + I2C pinout
+    let mut board_periph = init_board(
+        p.SPI2, p.DMA_CH0, p.I2C0, p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7,  // QSPI SIO0–SIO3
+        p.GPIO11, // TP_INT
+        p.GPIO12, // LCD_CS
+        p.GPIO13, // LCD_TE
+        p.GPIO14, p.GPIO15, // I2C SCL / SDA
+        p.GPIO38, // QSPI_SCLK
+        p.GPIO39, // LCD_RST
+        p.GPIO40, // TP_RST
     );
+
+    // De‑assert touch reset (CST9217 needs RST high to operate)
+    board_periph.touch_rst.set_high();
 
     // Wrap I2C bus in a shared mutex for multiple devices
     let shared_i2c_bus = mk_static!(SharedI2cBus, SharedI2cBus::new(board_periph.i2c_bus));
@@ -75,76 +84,66 @@ async fn main(spawner: Spawner) -> ! {
         )
     };
 
-    // Spawn WiFi and network tasks (non-blocking: OS continues while these connect in background)
-    spawner.spawn(wifi::connection_task(wf_ctrl)).unwrap();
-    spawner.spawn(wifi::net_task(runner)).unwrap();
+    // Spawn WiFi service (connection + network stack tasks)
+    services::wifi::register(&spawner, wf_ctrl, runner, bus);
 
     info!("WiFi connecting in background...");
 
-    // Create display (consumes the SPI bus)
-    let display = init_display(
-        board_periph.spi_bus,
-        board_periph.display_dc,
-        board_periph.display_rst,
+    // Create display (consumes the SPI bus + CS + RST pins)
+    let display = services::rendering::display::init_display(
+        board_periph.qspi_bus,
         board_periph.display_cs,
+        board_periph.display_rst,
     )
     .await;
 
-    // Initialize sensors (oxymeter + touch) on shared I2C bus
-    let oxymeter = init_oxymeter(&spawner, shared_i2c_bus)
-        .await
-        .expect("Failed to initialize oxymeter");
-
-    let touch = init_touch(
-        shared_i2c_bus,
-        ui::RenderConfig::dev_st7796().panel_width,
-        ui::RenderConfig::dev_st7796().panel_height,
-    )
-    .await
-    .expect("Failed to initialize touch controller");
-
     // Initialize Slint platform and window
-    let render_config = ui::RenderConfig::dev_st7796();
-    let window = ui::init_platform(render_config.viewport_size);
+    let render_config = ui::RenderConfig::production();
+    let window = services::rendering::platform::init_platform(render_config.viewport_size);
 
-    // Create shared window handle for touch_task to dispatch events directly
+    // Create shared window handle for touch service to dispatch events
     let shared_window = mk_static!(
-        ui::SharedWindowHandle,
-        ui::SharedWindowHandle::new(core::cell::RefCell::new(None))
+        services::rendering::SharedWindow,
+        services::rendering::SharedWindow::new(core::cell::RefCell::new(None))
     );
 
-    // Spawn dedicated touch task - dispatches directly to Slint window
-    spawner
-        .spawn(ui::touch_task(touch, render_config, shared_window))
-        .unwrap();
+    // Spawn touch service (CST9217 driver + INT-based task)
+    services::touch::register(
+        &spawner,
+        shared_i2c_bus,
+        shared_window,
+        board_periph.touch_int,
+        render_config,
+    );
 
-    // Spawn UI task - handles rendering, vitals, clock
-    spawner
-        .spawn(ui::ui_task(
-            render_config,
-            display,
-            shared_window,
-            window,
-            state::vitals_receiver(),
-        ))
-        .unwrap();
+    // Spawn rendering service (display driver + Slint platform + render loop)
+    services::rendering::register(&spawner, render_config, display, shared_window, window, bus);
 
     let cipher = crypto::Ascon::new(config::ASCON_KEY);
 
     // One-time crypto self-test
     {
-        let test_data = [0xAAu8; 12];
+        let test_data = [0xAAu8; 4];
         let (ct, nonce) = cipher.encrypt(&test_data);
         let pt = cipher.decrypt(&ct, &nonce);
         assert_eq!(&pt[..], &test_data, "crypto self-test failed!");
         info!("Crypto self-test passed");
     }
 
-    // start mqtt
-    spawner.spawn(mqtt::mqtt_task(stack)).unwrap();
+    // Spawn MQTT service (consumes encrypted payloads from bus.data_channel)
+    services::mqtt::register(&spawner, stack, bus);
 
-    // Spawn data pipeline task
-    spawner.spawn(pipeline_task(oxymeter, cipher)).unwrap();
+    // Spawn sensing service (fake vitals producer + encryption pipeline)
+    let rng = Rng::new();
+    services::sensing::register(&spawner, rng, cipher, bus);
+
+    // Storage smoke test
+    {
+        let storage = mk_static!(StorageService, StorageService::new());
+        storage.write("smoke_test", b"hello").await;
+        let val = storage.read("smoke_test").await;
+        info!("Storage smoke test: {:?}", val.map(|v| v.len()));
+    }
 
     // Idle loop
     info!(

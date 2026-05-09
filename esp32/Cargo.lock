@@ -550,12 +550,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64fa3c856b712db6612c019f14756e64e4bcea13337a6b33b696333a9eaa2d06"
 
 [[package]]
-name = "byte-slice-cast"
-version = "1.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7575182f7272186991736b70173b0ea045398f984bf5ebbb3804736ce1330c9d"
-
-[[package]]
 name = "bytemuck"
 version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1141,22 +1135,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "display-driver"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "543e45928e0344811c429556d103ba12549c809f18576feff38914029a93a67b"
+dependencies = [
+ "display-interface",
+ "embedded-graphics-core",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+]
+
+[[package]]
+name = "display-driver-co5300"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "856e5aea3157076fe9eb7fcc4467aab916e85b81e46e59e9518faac26c8848ef"
+dependencies = [
+ "delegate",
+ "display-driver",
+ "display-driver-mipidcs",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+]
+
+[[package]]
+name = "display-driver-mipidcs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ebae28ed86a14809fb30855c0abb8bbdf6e1ea283bed86f06dfe550d24607a0"
+dependencies = [
+ "bitflags 2.11.1",
+ "display-driver",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+]
+
+[[package]]
 name = "display-interface"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ba2aab1ef3793e6f7804162debb5ac5edb93b3d650fbcc5aeb72fcd0e6c03a0"
-
-[[package]]
-name = "display-interface-spi"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f86b9ec30048b1955da2038fcc3c017f419ab21bb0001879d16c0a3749dc6b7a"
-dependencies = [
- "byte-slice-cast",
- "display-interface",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
-]
 
 [[package]]
 name = "displaydoc"
@@ -1993,8 +2012,9 @@ dependencies = [
  "ascon-aead",
  "critical-section",
  "defmt 1.0.1",
- "display-interface",
- "display-interface-spi",
+ "display-driver",
+ "display-driver-co5300",
+ "display-driver-mipidcs",
  "embassy-embedded-hal 0.6.0",
  "embassy-executor",
  "embassy-net",
@@ -2008,9 +2028,7 @@ dependencies = [
  "esp-hal",
  "esp-radio",
  "esp-rtos",
- "ft6x36",
  "getrandom 0.2.17",
- "lcd-async",
  "libm",
  "max3010x",
  "max3010x-async",
@@ -2317,16 +2335,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "ft6x36"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a5a8dd73b86527b6106e5152dc8b8dde2d61d9dc445485eb70ce494feadf327"
-dependencies = [
- "embedded-hal 1.0.0",
- "num_enum",
 ]
 
 [[package]]
@@ -3426,18 +3434,6 @@ name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
-
-[[package]]
-name = "lcd-async"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "359805d2afdff45f3abad226ae27a61ee980309562d14084842c542af29b422a"
-dependencies = [
- "embedded-graphics",
- "embedded-graphics-core",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
-]
 
 [[package]]
 name = "leb128fmt"

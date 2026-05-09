@@ -125,12 +125,10 @@ smoltcp = { version = "0.12", default-features = false, features = [
 # trouble-host = { version = "0.6.0", features = ["gatt"] }
 
 # ! ### display crates ###
-# The Core Display Architecture
-display-interface = "0.5"
-display-interface-spi = "0.5"
-# The Specific Drivers
-lcd-async = "0.1" # Async fork of mipidsi - handles ST7796 with async SPI
-ft6x36 = "0.6"    # Driver for your FT6336U touch chip
+# The Core Display Architecture (display-driver ecosystem)
+display-driver = "0.1"
+display-driver-mipidcs = "0.1"
+display-driver-co5300 = "0.1"
 
 # ! ### utility crates ###
 # self explanatory
