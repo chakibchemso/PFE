@@ -35,6 +35,8 @@ rust-mqtt = { version = "0.5", default-features = false, features = [
   "bump",
   "v5",
 ] }
+# gps
+nmea = { version = "0.7", default-features = false, features = ["GNSS", "defmt-03"] }
 # ui
 embedded-graphics = "0.8"
 slint = { version = "1.16", default-features = false, features = [
@@ -101,6 +103,7 @@ embassy-net = { version = "0.9", features = [
 ] }
 embassy-sync = { version = "0.8", features = ["defmt"] }
 embassy-embedded-hal = "0.6.0"
+embedded-hal = "1.0.0"
 embedded-hal-async = "1.0.0"
 
 

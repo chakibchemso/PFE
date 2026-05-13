@@ -1,5 +1,5 @@
 use embassy_executor::Spawner;
-use esp_hal::gpio::Input;
+use esp_hal::gpio::{Input, Output};
 
 use crate::ui::config::RenderConfig;
 
@@ -14,9 +14,16 @@ pub fn register(
     i2c_bus: &'static crate::drivers::bus::SharedI2cBus,
     shared_window: &'static SharedWindowHandle,
     int_pin: Input<'static>,
+    touch_rst: Output<'static>,
     config: RenderConfig,
 ) {
     spawner
-        .spawn(task::touch_task(i2c_bus, shared_window, int_pin, config))
+        .spawn(task::touch_task(
+            i2c_bus,
+            shared_window,
+            int_pin,
+            touch_rst,
+            config,
+        ))
         .unwrap();
 }

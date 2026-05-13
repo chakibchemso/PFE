@@ -21,6 +21,12 @@
 //! | TP_SCL  | GPIO14|
 //! | TP_INT  | GPIO11|
 //! | TP_RST  | GPIO40|
+//!
+//! ## GPS Module (I2C, LC76G)
+//! | Signal  | GPIO  |
+//! |---------|-------|
+//! | GPS_SDA | GPIO15|  (shared I2C bus)
+//! | GPS_SCL | GPIO14|  (shared I2C bus)
 
 use esp_hal::{
     Async,
@@ -37,8 +43,6 @@ use crate::mk_static;
 use static_cell::StaticCell;
 
 /// DMA buffer size for SPI transfers (under 19-bit max, divisible by 4 and 32).
-// pub const SPI_DMA_RX_SIZE: usize = 32736;
-// pub const SPI_DMA_TX_SIZE: usize = 32736;
 pub const SPI_DMA_RX_SIZE: usize = 32736;
 pub const SPI_DMA_TX_SIZE: usize = 32736;
 
@@ -46,7 +50,7 @@ pub const SPI_DMA_TX_SIZE: usize = 32736;
 pub const SPI_FREQ_MHZ: u32 = 40;
 
 /// I2C clock frequency (400 kHz standard)
-pub const I2C_FREQ_KHZ: u32 = 400;
+pub const I2C_FREQ_KHZ: u32 = 100;
 
 /// Initialized board peripherals for the production board
 pub struct BoardPeripherals {
@@ -63,7 +67,7 @@ pub struct BoardPeripherals {
 ///
 /// ## Consumed peripherals
 /// - SPI2, DMA_CH0: QSPI display bus with DMA
-/// - I2C0: shared bus for touch and sensors
+/// - I2C0: shared bus for touch, GPS, and sensors
 /// - GPIO14, GPIO15: I2C SCL/SDA
 /// - GPIO4, GPIO5, GPIO6, GPIO7, GPIO12, GPIO38: QSPI data/control
 /// - GPIO13: display TE (tearing effect / VSYNC input)
@@ -128,7 +132,7 @@ pub fn init_board(
     .with_buffers(dma_rx_buf, dma_tx_buf)
     .into_async();
 
-    // --- I2C setup (shared bus for touch + sensors) ---
+    // --- I2C setup (shared bus for touch + GPS + sensors) ---
     let i2c_bus = I2c::new(
         i2c0,
         I2cConfig::default().with_frequency(Rate::from_khz(I2C_FREQ_KHZ)),

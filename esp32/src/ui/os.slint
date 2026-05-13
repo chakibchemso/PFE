@@ -14,7 +14,7 @@ component FPSOverlay inherits Rectangle {
     property <int> current_fps: 0;
 
     Timer {
-        interval: 16ms;
+        interval: 100ms;
         running: root.show;
         triggered => {
             root.frame_counter = root.frame_counter + 1;
@@ -73,6 +73,11 @@ export component SmartWatchUI inherits Window {
     in property <bool> wifi_connected: false;
     in property <bool> ascon_secure: false;
     in property <bool> gps_fix: false;
+    in property <float> gps_heading: 0.0;
+    in property <string> gps_coords: "--";
+    in property <string> gps_speed: "-- km/h";
+    in property <string> gps_sats: "-- sats";
+    in property <string> gps_altitude: "-- m";
     in-out property <bool> dark_mode <=> Theme.dark_mode;
     in-out property <bool> show_fps: false;
 
@@ -180,6 +185,11 @@ export component SmartWatchUI inherits Window {
             width: root.width;
             height: root.height;
             gps_fix: root.gps_fix;
+            gps_heading: root.gps_heading;
+            gps_coords: root.gps_coords;
+            gps_speed: root.gps_speed;
+            gps_sats: root.gps_sats;
+            gps_altitude: root.gps_altitude;
         }
     }
 

@@ -8,6 +8,7 @@
 //! Cross-service communication goes through `app::bus::SystemBus`.
 //! No service imports another service's internals.
 
+pub mod gps;
 pub mod mqtt;
 pub mod rendering;
 pub mod sensing;

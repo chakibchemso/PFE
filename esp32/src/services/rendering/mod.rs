@@ -24,6 +24,7 @@ pub fn register(
 ) {
     let vitals_rx = bus.vitals.receiver().expect("vitals receiver for UI");
     let wifi_rx = bus.wifi_status.receiver().expect("wifi receiver for UI");
+    let gps_rx = bus.gps.receiver().expect("gps receiver for UI");
 
     spawner
         .spawn(task::render_task(
@@ -33,6 +34,7 @@ pub fn register(
             window,
             vitals_rx,
             wifi_rx,
+            gps_rx,
         ))
         .unwrap();
 }

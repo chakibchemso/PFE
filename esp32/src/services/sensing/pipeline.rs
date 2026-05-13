@@ -1,7 +1,7 @@
 //! Data pipeline task: read vitals → fuse to u32 → encrypt → send via data channel.
 
 use alloc::vec::Vec;
-use defmt::info;
+use defmt::trace;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Sender as ChannelSender;
 use embassy_sync::watch::Receiver;
@@ -18,13 +18,13 @@ pub async fn pipeline_task(
     loop {
         let (bpm, spo2, temp) = vitals_rx.changed().await;
 
-        info!("Vitals: BPM={} SpO2={} Temp={}", bpm, spo2, temp);
+        trace!("Vitals: BPM={} SpO2={} Temp={}", bpm, spo2, temp);
 
         let packed: u32 = (bpm as u32) | ((spo2 as u32) << 8) | ((temp as u32) << 16);
         let data = packed.to_le_bytes();
 
         let (ciphertext, nonce) = cipher.encrypt(&data);
-        info!(
+        trace!(
             "Encrypted: {}",
             crate::utils::print_hex(&ciphertext).as_str()
         );

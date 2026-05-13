@@ -1,4 +1,4 @@
-use defmt::info;
+use defmt::{info, warn};
 use embassy_net::Runner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::Sender;
@@ -31,11 +31,11 @@ pub async fn connection_task(
                 info!("WiFi Connected to AP!");
                 wifi_sender.send(true);
                 controller.wait_for_event(WifiEvent::StaDisconnected).await;
-                info!("WiFi Disconnected. Reconnecting...");
+                warn!("WiFi Disconnected. Reconnecting...");
                 wifi_sender.send(false);
             }
             Err(e) => {
-                info!("Failed to connect: {:?}. Retrying...", e);
+                warn!("Failed to connect: {:?}. Retrying...", e);
                 Timer::after(Duration::from_millis(3000)).await;
             }
         }

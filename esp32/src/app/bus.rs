@@ -8,11 +8,41 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::watch::Watch;
 
+/// Parsed GPS fix data published by the GPS service.
+#[derive(Clone, Copy, Default, defmt::Format)]
+pub struct GpsFix {
+    pub lat: f32,
+    pub lon: f32,
+    pub speed_kmh: f32,
+    pub heading_deg: f32,
+    pub altitude_m: f32,
+    pub satellites: u8,
+    pub has_fix: bool,
+    pub fix_quality: u8,
+}
+
+impl GpsFix {
+    pub const fn no_fix() -> Self {
+        Self {
+            lat: 0.0,
+            lon: 0.0,
+            speed_kmh: 0.0,
+            heading_deg: 0.0,
+            altitude_m: 0.0,
+            satellites: 0,
+            has_fix: false,
+            fix_quality: 0,
+        }
+    }
+}
+
 pub struct SystemBus {
     /// Current vitals: (bpm: u8, spo2: u8, temp: u8)
     pub vitals: Watch<CriticalSectionRawMutex, (u8, u8, u8), 2>,
     /// WiFi connectivity state
     pub wifi_status: Watch<CriticalSectionRawMutex, bool, 2>,
+    /// GPS fix data
+    pub gps: Watch<CriticalSectionRawMutex, Option<GpsFix>, 2>,
     /// Encrypted payload queue (sensing → MQTT)
     pub data_channel: Channel<CriticalSectionRawMutex, Vec<u8>, 5>,
 }
@@ -22,6 +52,7 @@ impl SystemBus {
         Self {
             vitals: Watch::new(),
             wifi_status: Watch::new(),
+            gps: Watch::new(),
             data_channel: Channel::new(),
         }
     }

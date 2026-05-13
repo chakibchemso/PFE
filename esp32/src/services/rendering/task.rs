@@ -1,5 +1,6 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
+use defmt::info;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::watch::Receiver;
@@ -7,8 +8,10 @@ use embassy_time::{Duration, Instant, Timer};
 use slint::ComponentHandle;
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 
+use crate::app::bus::GpsFix;
 use crate::ui::SmartWatchUI;
 use crate::ui::config::RenderConfig;
+use crate::ui::widgets::gps::GpsState;
 use crate::ui::widgets::watchface;
 
 use super::display::SmartWatchDisplay;
@@ -26,6 +29,7 @@ pub async fn render_task(
     window: Rc<MinimalSoftwareWindow>,
     mut vitals_receiver: Receiver<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
     mut wifi_receiver: Receiver<'static, CriticalSectionRawMutex, bool, 2>,
+    mut gps_receiver: Receiver<'static, CriticalSectionRawMutex, Option<GpsFix>, 2>,
 ) {
     let viewport_size = config.viewport_size as usize;
     let mut fb = Framebuffer::new(viewport_size);
@@ -55,6 +59,8 @@ pub async fn render_task(
     let start_ms = Instant::now().as_millis();
 
     loop {
+        let frame_start = Instant::now();
+
         // Update WiFi status
         if let Some(connected) = wifi_receiver.try_changed() {
             ui.set_wifi_connected(connected);
@@ -79,6 +85,21 @@ pub async fn render_task(
             window.request_redraw();
         }
 
+        // Update GPS
+        if let Some(gps_fix) = gps_receiver.try_changed() {
+            let state = match gps_fix {
+                Some(ref fix) => GpsState::from_fix(fix),
+                None => GpsState::searching(),
+            };
+            ui.set_gps_fix(state.has_fix);
+            ui.set_gps_heading(state.heading);
+            ui.set_gps_coords(state.coords);
+            ui.set_gps_speed(state.speed);
+            ui.set_gps_sats(state.sats);
+            ui.set_gps_altitude(state.altitude);
+            window.request_redraw();
+        }
+
         slint::platform::update_timers_and_animations();
 
         let drew_anything = fb.render(&window, viewport_size);
@@ -87,6 +108,11 @@ pub async fn render_task(
             let _transfer_us = fb.transfer_full(config, &mut display).await;
         }
 
-        Timer::after(Duration::from_millis(0)).await;
+        // Cap at 30 FPS (33ms period)
+        let elapsed = frame_start.elapsed();
+        info!("elapsed: {}", elapsed.as_millis());
+        if elapsed < Duration::from_millis(100) {
+            Timer::after(Duration::from_millis(100) - elapsed).await;
+        }
     }
 }

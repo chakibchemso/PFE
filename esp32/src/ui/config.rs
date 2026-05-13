@@ -83,23 +83,13 @@ impl RenderConfig {
         }
     }
 
-    /// Map touch coordinates to viewport space, applying transformations and mask
+    /// Map touch coordinates to viewport space.
+    ///
+    /// The CST9217 driver already applies swap/mirror transformations,
+    /// so this only handles the viewport offset and round mask.
     pub fn map_touch_to_viewport(&self, x: u16, y: u16) -> Option<LogicalPosition> {
-        let mut x = x as i32;
-        let mut y = y as i32;
-
-        if self.touch_swap_xy {
-            core::mem::swap(&mut x, &mut y);
-        }
-        if self.touch_mirror_x {
-            x = self.panel_width as i32 - 1 - x;
-        }
-        if self.touch_mirror_y {
-            y = self.panel_height as i32 - 1 - y;
-        }
-
-        let local_x = x - self.viewport_offset_x as i32;
-        let local_y = y - self.viewport_offset_y as i32;
+        let local_x = x as i32 - self.viewport_offset_x as i32;
+        let local_y = y as i32 - self.viewport_offset_y as i32;
         if local_x < 0
             || local_y < 0
             || local_x >= self.viewport_size as i32

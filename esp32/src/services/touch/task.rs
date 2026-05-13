@@ -8,8 +8,8 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Timer};
-use esp_hal::gpio::Input;
+use embassy_time::{Delay, Duration, Timer};
+use esp_hal::gpio::{Input, Output};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::platform::{PointerEventButton, WindowEvent};
 
@@ -27,10 +27,13 @@ pub async fn touch_task(
     i2c_bus: &'static SharedI2cBus,
     window_ref: &'static SharedWindowHandle,
     int_pin: Input<'static>,
+    touch_rst: Output<'static>,
     config: RenderConfig,
 ) {
+    let delay = Delay;
+
     // Initialize the touch controller
-    let mut device = TouchDevice::new(i2c_bus)
+    let mut device = TouchDevice::new(i2c_bus, delay, touch_rst, &config)
         .await
         .expect("Failed to initialize touch controller");
 

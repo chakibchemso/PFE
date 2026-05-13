@@ -4,12 +4,13 @@
 use defmt::info;
 use embassy_executor::Spawner;
 use embassy_net::Config;
+use embassy_time::Timer;
 use esp_hal::rng::Rng;
 use esp_radio::Controller;
 use esp32::{
     app::bus::SystemBus,
     config, crypto,
-    drivers::bus::SharedI2cBus,
+    drivers::bus::{SharedI2cBus, SharedI2cDevice},
     mk_static,
     services::{self, storage::StorageService},
     system::{board::init_board, init_system},
@@ -40,7 +41,7 @@ async fn main(spawner: Spawner) -> ! {
         p.GPIO40, // TP_RST
     );
 
-    // De‑assert touch reset (CST9217 needs RST high to operate)
+    // De‑assert touch reset (CST9217 driver handles full reset sequence in init())
     board_periph.touch_rst.set_high();
 
     // Wrap I2C bus in a shared mutex for multiple devices
@@ -84,6 +85,8 @@ async fn main(spawner: Spawner) -> ! {
         )
     };
 
+    Timer::after_millis(100).await; // fucking pwr mgmt
+
     // Spawn WiFi service (connection + network stack tasks)
     services::wifi::register(&spawner, wf_ctrl, runner, bus);
 
@@ -113,6 +116,7 @@ async fn main(spawner: Spawner) -> ! {
         shared_i2c_bus,
         shared_window,
         board_periph.touch_int,
+        board_periph.touch_rst,
         render_config,
     );
 
@@ -133,9 +137,12 @@ async fn main(spawner: Spawner) -> ! {
     // Spawn MQTT service (consumes encrypted payloads from bus.data_channel)
     services::mqtt::register(&spawner, stack, bus);
 
-    // Spawn sensing service (fake vitals producer + encryption pipeline)
-    let rng = Rng::new();
-    services::sensing::register(&spawner, rng, cipher, bus);
+    // Spawn sensing service (MAX30102 vitals producer + encryption pipeline)
+    let oxymeter_i2c = SharedI2cDevice::new(shared_i2c_bus);
+    services::sensing::register(&spawner, oxymeter_i2c, cipher, bus).await;
+
+    // GPS service disabled — antenna/RF issues pending hardware fix
+    // services::gps::register(&spawner, shared_i2c_bus, bus);
 
     // Storage smoke test
     {

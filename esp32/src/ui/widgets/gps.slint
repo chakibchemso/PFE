@@ -3,6 +3,12 @@ import { CompassRing } from "../components/compass_ring.slint";
 
 export component GpsPage inherits Rectangle {
     in property <bool> gps_fix: false;
+    in property <float> gps_heading: 0.0;
+    in property <string> gps_coords: "--";
+    in property <string> gps_speed: "-- km/h";
+    in property <string> gps_sats: "-- sats";
+    in property <string> gps_altitude: "-- m";
+
     property <length> safe-inset: 48px;
 
     background: Theme.base;
@@ -19,15 +25,103 @@ export component GpsPage inherits Rectangle {
         horizontal-alignment: center;
     }
 
-    // Compass
+    // Compass with live heading
     CompassRing {
         x: parent.width / 2 - 72px;
-        y: parent.height / 2 + 10px - 72px;
-        needle_angle: 28;
+        y: 100px;
+        needle_angle: gps_heading;
         has_fix: gps_fix;
     }
 
     // Status text
+    Text {
+        x: 0;
+        y: 260px;
+        width: parent.width;
+        text: gps_fix ? "Fix locked" : "Searching";
+        color: gps_fix ? Theme.green : Theme.peach;
+        font-size: 16px;
+        font-weight: 700;
+        horizontal-alignment: center;
+    }
+
+    // Coordinates
+    Text {
+        x: 40px;
+        y: 290px;
+        width: parent.width - 80px;
+        text: gps_coords;
+        color: Theme.text;
+        font-size: 12px;
+        font-weight: 500;
+        horizontal-alignment: center;
+        overflow: elide;
+    }
+
+    // Speed
+    HorizontalLayout {
+        x: 48px;
+        y: 314px;
+        width: parent.width - 96px;
+        alignment: space-between;
+
+        Text {
+            text: "Speed";
+            color: Theme.subtext;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        Text {
+            text: gps_speed;
+            color: Theme.text;
+            font-size: 13px;
+            font-weight: 700;
+        }
+    }
+
+    // Satellites
+    HorizontalLayout {
+        x: 48px;
+        y: 336px;
+        width: parent.width - 96px;
+        alignment: space-between;
+
+        Text {
+            text: "Satellites";
+            color: Theme.subtext;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        Text {
+            text: gps_sats;
+            color: Theme.text;
+            font-size: 13px;
+            font-weight: 700;
+        }
+    }
+
+    // Altitude
+    HorizontalLayout {
+        x: 48px;
+        y: 358px;
+        width: parent.width - 96px;
+        alignment: space-between;
+
+        Text {
+            text: "Altitude";
+            color: Theme.subtext;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        Text {
+            text: gps_altitude;
+            color: Theme.text;
+            font-size: 13px;
+            font-weight: 700;
+        }
+    }
+
+    // Status badge
     Text {
         x: 0;
         y: parent.height - safe-inset;

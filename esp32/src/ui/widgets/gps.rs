@@ -1,31 +1,46 @@
-/// GPS page logic: compass needle angle and status formatting.
+/// GPS page logic: formats fix data for display and computes compass needle angle.
+use crate::app::bus::GpsFix;
+use crate::drivers::gps::format_coords;
 
 /// Result for the GPS display state.
 pub struct GpsState {
-    pub needle_angle: f32,
+    pub heading: f32,
     pub has_fix: bool,
-    pub status_text: slint::SharedString,
-    pub status_color: slint::Color,
+    pub coords: slint::SharedString,
+    pub speed: slint::SharedString,
+    pub sats: slint::SharedString,
+    pub altitude: slint::SharedString,
 }
 
 impl GpsState {
     /// Create a searching state (no GPS fix yet).
     pub fn searching() -> Self {
         Self {
-            needle_angle: 28.,
+            heading: 0.0,
             has_fix: false,
-            status_text: slint::format!("Searching"),
-            status_color: slint::Color::from_rgb_u8(250, 179, 135), // peach
+            coords: slint::SharedString::from("--"),
+            speed: slint::SharedString::from("-- km/h"),
+            sats: slint::SharedString::from("-- sats"),
+            altitude: slint::SharedString::from("-- m"),
         }
     }
 
-    /// Create a locked state with given heading.
-    pub fn locked(heading_deg: f32) -> Self {
+    /// Create state from a GPS fix.
+    pub fn from_fix(fix: &GpsFix) -> Self {
+        if !fix.has_fix {
+            return Self::searching();
+        }
+
+        let (coords_buf, coords_len) = format_coords(fix.lat, fix.lon);
+        let coords_str = core::str::from_utf8(&coords_buf[..coords_len]).unwrap_or("--");
+
         Self {
-            needle_angle: heading_deg,
+            heading: fix.heading_deg,
             has_fix: true,
-            status_text: slint::format!("Fix locked"),
-            status_color: slint::Color::from_rgb_u8(166, 227, 161), // green
+            coords: slint::SharedString::from(coords_str),
+            speed: slint::format!("{:.1} km/h", fix.speed_kmh),
+            sats: slint::format!("{} sats", fix.satellites),
+            altitude: slint::format!("{:.1} m", fix.altitude_m),
         }
     }
 }

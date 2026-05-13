@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use core::num::NonZeroU16;
+use defmt::{error, info, trace, warn};
 use embassy_net::{Stack, dns::DnsQueryType, tcp::TcpSocket};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
@@ -46,7 +47,7 @@ pub async fn mqtt_task(
         let broker_ip = match stack.dns_query(config::MQTT_HOST, DnsQueryType::A).await {
             Ok(addrs) => addrs.first().copied(),
             Err(e) => {
-                defmt::warn!("DNS query failed: {:?}", e);
+                warn!("DNS query failed: {:?}", e);
                 Timer::after(Duration::from_millis(backoff_ms)).await;
                 backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
                 continue;
@@ -56,27 +57,27 @@ pub async fn mqtt_task(
         let broker_ip = match broker_ip {
             Some(ip) => ip,
             None => {
-                defmt::warn!("No IP found for {}", config::MQTT_HOST);
+                warn!("No IP found for {}", config::MQTT_HOST);
                 Timer::after(Duration::from_millis(backoff_ms)).await;
                 backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
                 continue;
             }
         };
 
-        defmt::info!(
+        info!(
             "Connecting TCP to {}:{}...",
             config::MQTT_HOST,
             config::MQTT_PORT
         );
 
         if let Err(e) = socket.connect((broker_ip, config::MQTT_PORT)).await {
-            defmt::warn!("TCP Connect failed: {:?}", e);
+            warn!("TCP Connect failed: {:?}", e);
             Timer::after(Duration::from_millis(backoff_ms)).await;
             backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
             continue;
         }
 
-        defmt::info!("TCP Connected!");
+        info!("TCP Connected!");
 
         // 3. Create MQTT Client with BumpBuffer
         let mut buffer_storage = [0u8; BUFFER_CAPACITY];
@@ -105,7 +106,7 @@ pub async fn mqtt_task(
         let client_id = match MqttString::from_str(config::MQTT_CLIENT_ID) {
             Ok(id) => Some(id),
             Err(_) => {
-                defmt::error!("Failed to create client ID - string too long");
+                error!("Failed to create client ID - string too long");
                 Timer::after(Duration::from_millis(backoff_ms)).await;
                 backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
                 continue;
@@ -113,9 +114,9 @@ pub async fn mqtt_task(
         };
 
         match client.connect(socket, &connect_options, client_id).await {
-            Ok(_) => defmt::info!("MQTT Connected!"),
+            Ok(_) => info!("MQTT Connected!"),
             Err(_e) => {
-                defmt::error!("MQTT Connection failed");
+                error!("MQTT Connection failed");
                 Timer::after(Duration::from_millis(backoff_ms)).await;
                 backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
                 continue;
@@ -132,13 +133,13 @@ pub async fn mqtt_task(
         // 6. Main Loop - handle data publishing
         loop {
             if let Ok(data) = data_receiver.try_receive() {
-                defmt::info!("Publishing {} bytes...", data.len());
+                trace!("Publishing {} bytes...", data.len());
                 let message_bytes = Bytes::Borrowed(&data);
 
                 match client.publish(&pub_options, message_bytes).await {
-                    Ok(_) => defmt::info!("Published successfully"),
+                    Ok(_) => trace!("Published successfully"),
                     Err(_) => {
-                        defmt::error!("Publish failed");
+                        error!("Publish failed");
                         break; // Reconnect on publish failure
                     }
                 }
