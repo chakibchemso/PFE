@@ -67,6 +67,7 @@ export component SmartWatchUI inherits Window {
     in property <string> time: "--:--";
     in property <string> bpm: "--";
     in property <string> spo2: "--";
+    in property <string> cpu_temp: "--°C";
     in property <float> hour_angle: 330;
     in property <float> minute_angle: 24;
     in property <int> elapsed_seconds: 0;
@@ -164,6 +165,7 @@ export component SmartWatchUI inherits Window {
             elapsed_seconds: root.elapsed_seconds;
             wifi_connected: root.wifi_connected;
             ascon_secure: root.ascon_secure;
+            cpu_temp: root.cpu_temp;
         }
 
         OxymeterPage {

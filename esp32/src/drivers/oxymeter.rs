@@ -9,7 +9,7 @@ use max3010x_async::{
     marker::{ic::Max30102, mode::Oximeter},
 };
 
-use crate::drivers::bus::SharedI2cDevice;
+use crate::drivers::bus::{BusError, I2cPeripheral};
 use crate::dsp::{BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Spo2Calculator};
 
 // Plotter integration
@@ -27,7 +27,7 @@ const CH_CLEAN_RED: u8 = 2;
 const CH_CLEAN_IR: u8 = 3;
 
 pub struct OxymeterRunner {
-    sensor: Max3010x<SharedI2cDevice, Max30102, Oximeter>,
+    sensor: Max3010x<I2cPeripheral, Max30102, Oximeter>,
 
     // RED Pipeline
     dc_block_red: MovingMeanSubtractor<100>,
@@ -177,10 +177,11 @@ pub struct OxymeterHandle;
 impl OxymeterHandle {
     pub async fn start(
         spawner: &Spawner,
-        i2c: SharedI2cDevice,
+        i2c: I2cPeripheral,
         sender: Sender<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
-    ) -> Result<Self, embassy_embedded_hal::shared_bus::I2cDeviceError<esp_hal::i2c::master::Error>>
-    {
+    ) -> Result<Self, BusError> {
+        Timer::after(Duration::from_millis(10000)).await;
+
         let mut sensor = Max3010x::new_max30102(i2c);
 
         sensor.reset().await.unwrap();
@@ -217,9 +218,7 @@ impl OxymeterHandle {
             // samples_sent: 0,
         };
 
-        spawner
-            .spawn(acquisition_task(runner, sender))
-            .expect("Task queue full");
+        spawner.spawn(acquisition_task(runner, sender).unwrap());
 
         Ok(Self {})
     }

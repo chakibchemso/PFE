@@ -33,8 +33,9 @@ use esp_hal::{
     dma::{DmaRxBuf, DmaTxBuf},
     dma_descriptors,
     gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull},
-    i2c::master::{Config as I2cConfig, I2c},
+    i2c::master::{BusTimeout, Config as I2cConfig, I2c},
     peripherals,
+    psram::{FlashFreq, PsramConfig, PsramMode, PsramSize, SpiRamFreq, SpiTimingConfigCoreClock},
     spi::master::{Config as SpiConfig, Spi, SpiDmaBus},
     time::Rate,
 };
@@ -50,7 +51,7 @@ pub const SPI_DMA_TX_SIZE: usize = 32736;
 pub const SPI_FREQ_MHZ: u32 = 40;
 
 /// I2C clock frequency (400 kHz standard)
-pub const I2C_FREQ_KHZ: u32 = 100;
+pub const I2C_FREQ_KHZ: u32 = 400;
 
 /// Initialized board peripherals for the production board
 pub struct BoardPeripherals {
@@ -75,6 +76,7 @@ pub struct BoardPeripherals {
 /// - GPIO11, GPIO40: touch INT and reset
 #[allow(clippy::too_many_arguments)]
 pub fn init_board(
+    psram: peripherals::PSRAM<'static>,
     spi2: peripherals::SPI2<'static>,
     dma_ch0: peripherals::DMA_CH0<'static>,
     i2c0: peripherals::I2C0<'static>,
@@ -91,6 +93,23 @@ pub fn init_board(
     gpio39: peripherals::GPIO39<'static>,
     gpio40: peripherals::GPIO40<'static>,
 ) -> BoardPeripherals {
+    // Initialize heap: internal SRAM + PSRAM
+    {
+        // Internal SRAM heap in regular DRAM.
+        esp_alloc::heap_allocator!(size: 64 * 1024);
+        // Additional SRAM reclaimed from unused ROM sections.
+        esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
+        // PSRAM heap (16MB on ESP32-S3N32R16V)
+        let psram_config = PsramConfig {
+            mode: PsramMode::OctalSpi,
+            size: PsramSize::AutoDetect,
+            core_clock: Some(SpiTimingConfigCoreClock::SpiTimingConfigCoreClock160m),
+            flash_frequency: FlashFreq::FlashFreq80m,
+            ram_frequency: SpiRamFreq::Freq80m,
+        };
+        esp_alloc::psram_allocator!(psram, esp_hal::psram, psram_config);
+    }
+
     // --- Display control pins ---
     let display_cs = Output::new(gpio12, Level::High, OutputConfig::default());
     let display_rst = Output::new(gpio39, Level::Low, OutputConfig::default());
@@ -135,11 +154,13 @@ pub fn init_board(
     // --- I2C setup (shared bus for touch + GPS + sensors) ---
     let i2c_bus = I2c::new(
         i2c0,
-        I2cConfig::default().with_frequency(Rate::from_khz(I2C_FREQ_KHZ)),
+        I2cConfig::default()
+            .with_frequency(Rate::from_khz(I2C_FREQ_KHZ))
+            .with_timeout(BusTimeout::Maximum),
     )
     .expect("Failed to initialize I2C")
-    .with_sda(gpio15)
     .with_scl(gpio14)
+    .with_sda(gpio15)
     .into_async();
 
     BoardPeripherals {

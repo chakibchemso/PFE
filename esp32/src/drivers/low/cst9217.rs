@@ -451,7 +451,10 @@ where
 
         // Write ACK: [0xD0, 0x00, 0xAB]
         self.i2c
-            .write(self.addr, &[(REG_READ >> 8) as u8, REG_READ as u8, CST92XX_ACK])
+            .write(
+                self.addr,
+                &[(REG_READ >> 8) as u8, REG_READ as u8, CST92XX_ACK],
+            )
             .await
             .map_err(Error::I2c)?;
 
@@ -683,10 +686,7 @@ where
 
                 // Read response
                 let res = self
-                    .write_then_read(
-                        &[BL_CMD_HANDSHAKE, BL_SUB_HANDSHAKE + 1],
-                        &mut read_buf,
-                    )
+                    .write_then_read(&[BL_CMD_HANDSHAKE, BL_SUB_HANDSHAKE + 1], &mut read_buf)
                     .await;
                 if res.is_ok() && read_buf[0] == BL_HS_RESP_0 && read_buf[1] == BL_HS_RESP_1 {
                     // Exit handshake
@@ -746,31 +746,22 @@ where
 
         // Trigger: [0xA0, 0x04, 0xE4]
         self.i2c
-            .write(
-                self.addr,
-                &[BL_CMD_HANDSHAKE, BL_SUB_STATUS, BL_TRIG_READ],
-            )
+            .write(self.addr, &[BL_CMD_HANDSHAKE, BL_SUB_STATUS, BL_TRIG_READ])
             .await
             .map_err(Error::I2c)?;
 
         // Poll until status == 0x00
         for _ in 0..100 {
-            self.write_then_read(
-                &[BL_CMD_HANDSHAKE, BL_SUB_STATUS],
-                &mut read_buf[..1],
-            )
-            .await?;
+            self.write_then_read(&[BL_CMD_HANDSHAKE, BL_SUB_STATUS], &mut read_buf[..1])
+                .await?;
             if read_buf[0] == 0x00 {
                 break;
             }
         }
 
         // Read data: [0xA0, 0x18] → 4 bytes
-        self.write_then_read(
-            &[BL_CMD_HANDSHAKE, BL_SUB_MEM_READ],
-            &mut read_buf,
-        )
-        .await?;
+        self.write_then_read(&[BL_CMD_HANDSHAKE, BL_SUB_MEM_READ], &mut read_buf)
+            .await?;
 
         self.addr = saved_addr;
         Ok(u32::from_le_bytes(read_buf))

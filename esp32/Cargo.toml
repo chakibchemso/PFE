@@ -48,18 +48,18 @@ slint = { version = "1.16", default-features = false, features = [
 
 # ! ### espressif crates ###
 # provides the bootloader and app description for flashing
-esp-bootloader-esp-idf = { version = "0.4.0", features = ["defmt", "esp32s3"] }
+esp-bootloader-esp-idf = { version = "0.5", features = ["defmt", "esp32s3"] }
 # provides the HAL impl for the ESP32
-esp-hal = { version = "~1.0", features = [
+esp-hal = { version = "~1.1", features = [
   "defmt",
   "esp32s3",
   "unstable",
-  "psram",
+  # "psram",
 ] }
 # provides heap mem allocation for the ESP32
-esp-alloc = { version = "0.9.0", features = ["defmt"] }
+esp-alloc = { version = "0.10", features = ["defmt"] }
 # provides async runtime, alloc, and radio support
-esp-rtos = { version = "0.2.0", features = [
+esp-rtos = { version = "0.3", features = [
   "defmt",
   "esp32s3",
   "embassy",
@@ -67,20 +67,20 @@ esp-rtos = { version = "0.2.0", features = [
   "esp-radio",
 ] }
 # provides Wi-Fi and Bluetooth support for the ESP32 (driver L2)
-esp-radio = { version = "0.17.0", features = [
+esp-radio = { version = "0.18", features = [
   "defmt",
   "esp32s3",
   "ble",
   "coex",
   "esp-alloc",
-  "smoltcp",
+  # "smoltcp",
   "unstable",
   "wifi",
 ] }
 
 # ! ### debugging crates ###
 # fuck regular logging
-defmt = "1.0.1"
+defmt = "1.1"
 # enables RTT logging support
 rtt-target = { version = "0.6.2", features = ["defmt"] }
 # enables panic messages to be sent over RTT
@@ -88,7 +88,7 @@ panic-rtt-target = { version = "0.2.0", features = ["defmt"] }
 
 # ! ### embassy crates ###
 # task executor async (wrapped by esp-rtos)
-embassy-executor = { version = "0.9", features = ["defmt"] }
+embassy-executor = { version = "0.10", features = ["defmt"] }
 # time(r) management
 embassy-time = { version = "0.5", features = ["defmt"] }
 # network async

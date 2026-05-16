@@ -1,7 +1,5 @@
-use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
-use embassy_sync::mutex::Mutex;
-use esp_hal::{Async, i2c::master::I2c};
+//! Re-exports from the centralized I²C manager.
+//!
+//! These type aliases are kept for backward compatibility.
 
-pub type SharedI2cBus = Mutex<NoopRawMutex, I2c<'static, Async>>;
-pub type SharedI2cDevice = I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>;
+pub use super::i2c::{BusError, I2cBus, I2cPeripheral, SharedI2cBus, SharedI2cDevice};

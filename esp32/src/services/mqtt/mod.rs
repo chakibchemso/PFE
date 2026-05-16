@@ -11,5 +11,5 @@ use task::mqtt_task;
 pub fn register(spawner: &Spawner, stack: Stack<'static>, bus: &'static SystemBus) {
     let data_receiver = bus.data_channel.receiver();
 
-    spawner.spawn(mqtt_task(stack, data_receiver)).unwrap();
+    spawner.spawn(mqtt_task(stack, data_receiver).unwrap());
 }

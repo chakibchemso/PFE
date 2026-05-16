@@ -3,17 +3,14 @@
 
 use defmt::info;
 use embassy_executor::Spawner;
-use embassy_net::Config;
-use embassy_time::Timer;
-use esp_hal::rng::Rng;
-use esp_radio::Controller;
+use esp_hal::{interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup};
 use esp32::{
     app::bus::SystemBus,
     config, crypto,
-    drivers::bus::{SharedI2cBus, SharedI2cDevice},
+    drivers::bus::I2cBus,
     mk_static,
     services::{self, storage::StorageService},
-    system::{board::init_board, init_system},
+    system::{self, board::init_board, init_system},
     ui, utils,
 };
 use static_cell::StaticCell;
@@ -30,8 +27,9 @@ async fn main(spawner: Spawner) -> ! {
     let bus = mk_static!(SystemBus, SystemBus::new());
 
     // Initialize board peripherals — production QSPI + I2C pinout
-    let mut board_periph = init_board(
-        p.SPI2, p.DMA_CH0, p.I2C0, p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7,  // QSPI SIO0–SIO3
+    let board_periph = init_board(
+        p.PSRAM, p.SPI2, p.DMA_CH0, p.I2C0, // peripherals
+        p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7,  // QSPI SIO0–SIO3
         p.GPIO11, // TP_INT
         p.GPIO12, // LCD_CS
         p.GPIO13, // LCD_TE
@@ -41,54 +39,42 @@ async fn main(spawner: Spawner) -> ! {
         p.GPIO40, // TP_RST
     );
 
-    // De‑assert touch reset (CST9217 driver handles full reset sequence in init())
-    board_periph.touch_rst.set_high();
-
-    // Wrap I2C bus in a shared mutex for multiple devices
-    let shared_i2c_bus = mk_static!(SharedI2cBus, SharedI2cBus::new(board_periph.i2c_bus));
-
     // Initialize RTOS timer
     {
-        use esp_hal::timer::timg::TimerGroup;
         let timg0 = TimerGroup::new(p.TIMG0);
-        esp_rtos::start(timg0.timer0);
+        let sw_interrupt = SoftwareInterruptControl::new(p.SW_INTERRUPT);
+        esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
     }
 
-    // Initialize radio controller
-    let rd_ctrl = mk_static!(
-        Controller<'static>,
-        esp_radio::init().expect("Failed to initialize radio controller")
+    // Initialize WiFi radio + network stack
+    let net = system::net::init(p.WIFI).await;
+
+    // De‑assert touch reset (CST9217 driver handles full reset sequence in init())
+    // board_periph.touch_rst.set_high();
+
+    // ── I²C bus manager ────────────────────────────────────────────────
+    let i2c_bus = mk_static!(
+        I2cBus,
+        I2cBus::new(board_periph.i2c_bus, esp32::system::board::I2C_FREQ_KHZ)
     );
 
-    // Initialize WiFi
-    let (wf_ctrl, wf_device) =
-        esp_radio::wifi::new(rd_ctrl, p.WIFI, esp_radio::wifi::Config::default())
-            .expect("Failed to initialize WiFi control");
+    // Scan the bus — print every device that ACKs
+    // {
+    //     let scan = i2c_bus.scan().await;
+    //     info!("I2C bus scan:");
+    //     for addr in 1..=0x7Fu8 {
+    //         if scan[addr as usize] {
+    //             info!("  0x{:02X} ACK", addr);
+    //         }
+    //     }
+    // }
 
-    // Initialize network stack
-    let (stack, runner) = {
-        let sta_conf = Config::dhcpv4(Default::default());
-
-        let seed = {
-            let rng = Rng::new();
-            ((rng.random() as u64) << 32) | (rng.random() as u64)
-        };
-
-        embassy_net::new(
-            wf_device.sta,
-            sta_conf,
-            mk_static!(
-                embassy_net::StackResources<3>,
-                embassy_net::StackResources::<3>::new()
-            ),
-            seed,
-        )
-    };
-
-    Timer::after_millis(100).await; // fucking pwr mgmt
+    // Create one device handle per peripheral — the single source of truth
+    let touch_i2c = i2c_bus.device(0x5A, "touch");
+    let oxymeter_i2c = i2c_bus.device(0x57, "oxymeter");
 
     // Spawn WiFi service (connection + network stack tasks)
-    services::wifi::register(&spawner, wf_ctrl, runner, bus);
+    services::wifi::register(&spawner, net.controller, net.runner, bus);
 
     info!("WiFi connecting in background...");
 
@@ -113,7 +99,7 @@ async fn main(spawner: Spawner) -> ! {
     // Spawn touch service (CST9217 driver + INT-based task)
     services::touch::register(
         &spawner,
-        shared_i2c_bus,
+        touch_i2c,
         shared_window,
         board_periph.touch_int,
         board_periph.touch_rst,
@@ -135,14 +121,17 @@ async fn main(spawner: Spawner) -> ! {
     }
 
     // Spawn MQTT service (consumes encrypted payloads from bus.data_channel)
-    services::mqtt::register(&spawner, stack, bus);
+    services::mqtt::register(&spawner, net.stack, bus);
 
-    // Spawn sensing service (MAX30102 vitals producer + encryption pipeline)
-    let oxymeter_i2c = SharedI2cDevice::new(shared_i2c_bus);
-    services::sensing::register(&spawner, oxymeter_i2c, cipher, bus).await;
+    // Spawn sensing service (MAX30102 vitals producer + die temp + encryption pipeline)
+    services::sensing::register(&spawner, oxymeter_i2c, cipher, bus, unsafe {
+        core::mem::transmute(p.SENS)
+    })
+    .await;
 
     // GPS service disabled — antenna/RF issues pending hardware fix
-    // services::gps::register(&spawner, shared_i2c_bus, bus);
+    // let gps_i2c = i2c_bus.device(0x50, "gps");
+    // services::gps::register(&spawner, gps_i2c, bus);
 
     // Storage smoke test
     {

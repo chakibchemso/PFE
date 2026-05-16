@@ -30,6 +30,7 @@ pub async fn render_task(
     mut vitals_receiver: Receiver<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
     mut wifi_receiver: Receiver<'static, CriticalSectionRawMutex, bool, 2>,
     mut gps_receiver: Receiver<'static, CriticalSectionRawMutex, Option<GpsFix>, 2>,
+    mut cpu_temp_receiver: Receiver<'static, CriticalSectionRawMutex, i8, 2>,
 ) {
     let viewport_size = config.viewport_size as usize;
     let mut fb = Framebuffer::new(viewport_size);
@@ -45,6 +46,7 @@ pub async fn render_task(
     ui.set_gps_fix(false);
     ui.set_dark_mode(true);
     ui.set_show_fps(false);
+    ui.set_cpu_temp(slint::format!("--°C"));
     ui.show().unwrap();
 
     window.request_redraw();
@@ -82,6 +84,12 @@ pub async fn render_task(
         if let Some((bpm, spo2, _temp)) = vitals_receiver.try_changed() {
             ui.set_bpm(slint::format!("{}", bpm));
             ui.set_spo2(slint::format!("{}", spo2));
+            window.request_redraw();
+        }
+
+        // Update CPU die temperature
+        if let Some(temp) = cpu_temp_receiver.try_changed() {
+            ui.set_cpu_temp(slint::format!("{}°C", temp));
             window.request_redraw();
         }
 

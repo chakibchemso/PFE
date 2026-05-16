@@ -45,6 +45,8 @@ pub struct SystemBus {
     pub gps: Watch<CriticalSectionRawMutex, Option<GpsFix>, 2>,
     /// Encrypted payload queue (sensing → MQTT)
     pub data_channel: Channel<CriticalSectionRawMutex, Vec<u8>, 5>,
+    /// ESP32 die temperature in Celsius
+    pub cpu_temp: Watch<CriticalSectionRawMutex, i8, 2>,
 }
 
 impl SystemBus {
@@ -54,6 +56,7 @@ impl SystemBus {
             wifi_status: Watch::new(),
             gps: Watch::new(),
             data_channel: Channel::new(),
+            cpu_temp: Watch::new(),
         }
     }
 }

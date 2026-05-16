@@ -4,47 +4,61 @@
 //! task waits for this edge instead of polling, reducing bus traffic and CPU
 //! wakeups when the panel is idle.
 
-use embassy_time::Delay;
+use embassy_time::{Delay, Duration, Timer};
 
-use crate::drivers::bus::{SharedI2cBus, SharedI2cDevice};
+use crate::drivers::bus::{BusError, I2cPeripheral};
 use crate::drivers::low::cst9217::{Cst9217, Error as CstError};
 use crate::ui::config::RenderConfig;
 
-/// I²C error type for the shared bus device.
-pub type SharedI2cError =
-    embassy_embedded_hal::shared_bus::I2cDeviceError<esp_hal::i2c::master::Error>;
+pub type Cst9217Touch = Cst9217<I2cPeripheral, Delay, esp_hal::gpio::Output<'static>>;
 
-pub type Cst9217Touch = Cst9217<SharedI2cDevice, Delay, esp_hal::gpio::Output<'static>>;
+/// Number of init retry attempts before giving up.
+const INIT_RETRIES: u8 = 3;
 
 pub enum TouchDevice {
     Cst9217(Cst9217Touch),
 }
 
 impl TouchDevice {
-    /// Initialise the CST9217 on the shared I2C bus.
+    /// Initialise the CST9217 on the given I²C device handle.
     ///
-    /// The reset pin should already be high. The driver will handle the
-    /// reset sequence internally via [`Cst9217::init`].
+    /// The reset pin should already be high. The driver handles the reset
+    /// sequence via [`Cst9217::init`] with retry / per-device recovery.
     pub async fn new(
-        i2c_bus: &'static SharedI2cBus,
+        i2c: I2cPeripheral,
         delay: Delay,
         touch_rst: esp_hal::gpio::Output<'static>,
         config: &RenderConfig,
-    ) -> Result<Self, CstError<SharedI2cError>> {
-        let i2c = SharedI2cDevice::new(i2c_bus);
-
+    ) -> Result<Self, CstError<BusError>> {
+        // Create the driver once — delay and touch_rst are not Copy, so
+        // we can't recreate them inside a retry loop. Retry is handled
+        // on init() which resets the chip each time.
+        let mut recovery = i2c.clone();
         let mut touch = Cst9217::new(i2c, delay, Some(touch_rst), 0x5A);
-        touch.init().await?;
 
-        // Apply touch coordinate transformations from render config
-        touch.set_swap_xy(config.touch_swap_xy);
-        touch.set_mirror_xy(config.touch_mirror_x, config.touch_mirror_y);
-        touch.set_max_coordinates(config.panel_width, config.panel_height);
+        let mut last_err = None;
+        for attempt in 0..INIT_RETRIES {
+            match touch.init().await {
+                Ok(_) => {
+                    touch.set_swap_xy(config.touch_swap_xy);
+                    touch.set_mirror_xy(config.touch_mirror_x, config.touch_mirror_y);
+                    touch.set_max_coordinates(config.panel_width, config.panel_height);
+                    return Ok(Self::Cst9217(touch));
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    if attempt < INIT_RETRIES - 1 {
+                        recovery.recover().await;
+                        Timer::after(Duration::from_millis(10)).await;
+                    }
+                }
+            }
+        }
 
-        Ok(Self::Cst9217(touch))
+        Err(last_err.unwrap())
     }
 
-    pub async fn read_touch(&mut self) -> Result<Option<(u16, u16)>, CstError<SharedI2cError>> {
+    pub async fn read_touch(&mut self) -> Result<Option<(u16, u16)>, CstError<BusError>> {
         match self {
             Self::Cst9217(touch) => {
                 let data = touch.read_touch().await?;

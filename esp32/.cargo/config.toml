@@ -5,7 +5,7 @@ runner = "espflash flash -B 921600 -L defmt"
 [env]
 DEFMT_LOG = "info"
 # Tell esp-hal to compile the PSRAM driver in Octal mode
-ESP_HAL_CONFIG_PSRAM_MODE = "octal"
+# ESP_HAL_CONFIG_PSRAM_MODE = "octal"
 
 [build]
 target = "xtensa-esp32s3-none-elf"

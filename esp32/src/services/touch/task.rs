@@ -14,7 +14,7 @@ use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::platform::{PointerEventButton, WindowEvent};
 
 use super::driver::TouchDevice;
-use crate::drivers::bus::SharedI2cBus;
+use crate::drivers::bus::I2cPeripheral;
 use crate::ui::config::RenderConfig;
 
 /// Shared window handle type
@@ -24,7 +24,7 @@ pub type SharedWindowHandle =
 /// Touch task: initializes CST9217, then polls INT pin and dispatches to Slint.
 #[embassy_executor::task]
 pub async fn touch_task(
-    i2c_bus: &'static SharedI2cBus,
+    i2c: I2cPeripheral,
     window_ref: &'static SharedWindowHandle,
     int_pin: Input<'static>,
     touch_rst: Output<'static>,
@@ -33,7 +33,7 @@ pub async fn touch_task(
     let delay = Delay;
 
     // Initialize the touch controller
-    let mut device = TouchDevice::new(i2c_bus, delay, touch_rst, &config)
+    let mut device = TouchDevice::new(i2c, delay, touch_rst, &config)
         .await
         .expect("Failed to initialize touch controller");
 

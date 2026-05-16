@@ -1,26 +1,20 @@
 use defmt::{error, info, warn};
-use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex, NoopRawMutex};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::Sender;
 use embassy_time::{Duration, Timer};
-use esp_hal::Async;
-use esp_hal::i2c::master::I2c;
 use nmea::sentences::FixType;
 use nmea::{Nmea, SentenceType};
 
 use crate::app::bus::GpsFix;
+use crate::drivers::bus::I2cPeripheral;
 use crate::drivers::gps::Lc76g;
-
-type SharedDevice = I2cDevice<'static, NoopRawMutex, I2c<'static, Async>>;
 
 #[embassy_executor::task]
 pub async fn gps_task(
-    i2c_bus: &'static crate::drivers::bus::SharedI2cBus,
+    i2c: I2cPeripheral,
     sender: Sender<'static, CriticalSectionRawMutex, Option<GpsFix>, 2>,
 ) {
-    info!("GPS task starting, creating I2C device...");
-    let i2c_dev = SharedDevice::new(i2c_bus);
-    let mut gps = Lc76g::new(i2c_dev);
+    let mut gps = Lc76g::new(i2c);
     let mut nmea = Nmea::create_for_navigation(&[SentenceType::RMC, SentenceType::GGA]).unwrap();
 
     // --- Power on sequence ---
