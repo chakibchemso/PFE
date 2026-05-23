@@ -40,15 +40,21 @@ use esp_hal::{
     time::Rate,
 };
 
-use crate::mk_static;
+use core::mem::MaybeUninit;
 use static_cell::StaticCell;
 
 /// DMA buffer size for SPI transfers (under 19-bit max, divisible by 4 and 32).
-pub const SPI_DMA_RX_SIZE: usize = 32736;
-pub const SPI_DMA_TX_SIZE: usize = 32736;
+pub const SPI_DMA_RX_SIZE: usize = 64; // unused
+pub const SPI_DMA_TX_SIZE: usize = 32736 / 4; // 8192
+
+// DMA buffers placed in .bss (zeroed by CRT before main).
+// Avoid mk_static!([0; SIZE]) — that creates a SIZE-byte temporary on the
+// stack, and two 32KB temps eat 64KB of core 0's ~102KB stack.
+static DMA_RX_BUF: StaticCell<MaybeUninit<[u8; SPI_DMA_RX_SIZE]>> = StaticCell::new();
+static DMA_TX_BUF: StaticCell<MaybeUninit<[u8; SPI_DMA_TX_SIZE]>> = StaticCell::new();
 
 /// SPI clock frequency (40 MHz — safe for CO5300 init; can bump to 80 MHz later)
-pub const SPI_FREQ_MHZ: u32 = 40;
+pub const SPI_FREQ_MHZ: u32 = 80;
 
 /// I2C clock frequency (400 kHz standard)
 pub const I2C_FREQ_KHZ: u32 = 400;
@@ -93,13 +99,12 @@ pub fn init_board(
     gpio39: peripherals::GPIO39<'static>,
     gpio40: peripherals::GPIO40<'static>,
 ) -> BoardPeripherals {
-    // Initialize heap: internal SRAM + PSRAM
+    // Initialize heap: DRAM for WiFi DMA + PSRAM for everything else.
+    // WiFi hardware DMA cannot address PSRAM — its buffers MUST land in
+    // internal SRAM. Reserve a DRAM pool just large enough for WiFi.
     {
-        // Internal SRAM heap in regular DRAM.
         esp_alloc::heap_allocator!(size: 64 * 1024);
-        // Additional SRAM reclaimed from unused ROM sections.
         esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
-        // PSRAM heap (16MB on ESP32-S3N32R16V)
         let psram_config = PsramConfig {
             mode: PsramMode::OctalSpi,
             size: PsramSize::AutoDetect,
@@ -123,15 +128,16 @@ pub fn init_board(
 
     // --- QSPI setup (SPI2 with quad I/O lines) ---
     let (rx_descriptors, tx_descriptors) = dma_descriptors!(SPI_DMA_RX_SIZE, SPI_DMA_TX_SIZE);
+    // Buffer memory is in .bss — already zeroed by CRT. No stack temporary.
     let dma_rx_buf = DmaRxBuf::new(
         rx_descriptors,
-        mk_static!([u8; SPI_DMA_RX_SIZE], [0; SPI_DMA_RX_SIZE]),
+        unsafe { DMA_RX_BUF.init(MaybeUninit::uninit()).assume_init_mut() },
     )
     .unwrap();
 
     let dma_tx_buf = DmaTxBuf::new(
         tx_descriptors,
-        mk_static!([u8; SPI_DMA_TX_SIZE], [0; SPI_DMA_TX_SIZE]),
+        unsafe { DMA_TX_BUF.init(MaybeUninit::uninit()).assume_init_mut() },
     )
     .unwrap();
 

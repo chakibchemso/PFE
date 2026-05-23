@@ -1,22 +1,88 @@
 #![no_std]
 #![no_main]
 
-use defmt::info;
+use defmt::{info, trace};
 use embassy_executor::Spawner;
-use esp_hal::{interrupt::software::SoftwareInterruptControl, timer::timg::TimerGroup};
+use esp_hal::{
+    Async,
+    gpio::{Input, Output},
+    interrupt::software::SoftwareInterruptControl,
+    spi::master::SpiDmaBus,
+    system::Stack,
+    timer::timg::TimerGroup,
+};
+use esp_rtos::{embassy::Executor, start_second_core};
 use esp32::{
     app::bus::SystemBus,
     config, crypto,
-    drivers::bus::I2cBus,
+    drivers::bus::{I2cBus, I2cPeripheral},
     mk_static,
     services::{self, storage::StorageService},
     system::{self, board::init_board, init_system},
     ui, utils,
 };
 use static_cell::StaticCell;
+use utils::SendWrap;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 getrandom::register_custom_getrandom!(utils::custom_getrandom);
+
+// ── Core 1 statics ────────────────────────────────────────────────────────
+
+/// Stack for core 1's scheduler + embassy executor + Slint rendering pipeline.
+static CORE1_STACK: StaticCell<Stack<65536>> = StaticCell::new();
+
+/// Thread-mode executor for core 1 (rendering + touch).
+static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
+
+// ── Core 1 bootstrap ──────────────────────────────────────────────────────
+
+/// One-shot init for core 1: display, Slint platform, touch + rendering.
+///
+/// Runs once at startup, spawns the persistent touch and rendering tasks,
+/// then enters an idle loop to keep the executor alive.
+#[embassy_executor::task]
+async fn core1_bootstrap(
+    spawner: Spawner,
+    qspi: SendWrap<SpiDmaBus<'static, Async>>,
+    cs: SendWrap<Output<'static>>,
+    rst: SendWrap<Output<'static>>,
+    touch_int: SendWrap<Input<'static>>,
+    touch_rst: SendWrap<Output<'static>>,
+    touch_i2c: SendWrap<I2cPeripheral>,
+    render_config: ui::RenderConfig,
+    bus: &'static SystemBus,
+) {
+    trace!("Core 1: initializing display…");
+
+    let display = services::rendering::display::init_display(qspi.0, cs.0, rst.0).await;
+    let window = services::rendering::platform::init_platform(render_config.viewport_size);
+
+    let shared_window = mk_static!(
+        services::rendering::SharedWindow,
+        services::rendering::SharedWindow::new(core::cell::RefCell::new(None))
+    );
+
+    services::touch::register(
+        &spawner,
+        touch_i2c.0,
+        shared_window,
+        touch_int.0,
+        touch_rst.0,
+        render_config,
+    );
+
+    services::rendering::register(&spawner, render_config, display, shared_window, window, bus);
+
+    info!("Core 1: rendering + touch running");
+
+    // Keep the executor alive — no further work for this bootstrap task
+    loop {
+        embassy_time::Timer::after_secs(60).await;
+    }
+}
+
+// ── Main (core 0) ─────────────────────────────────────────────────────────
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
@@ -24,7 +90,7 @@ async fn main(spawner: Spawner) -> ! {
     let p = init_system();
 
     // Create the System Bus — central IPC manifest for all services
-    let bus = mk_static!(SystemBus, SystemBus::new());
+    let bus: &'static SystemBus = mk_static!(SystemBus, SystemBus::new());
 
     // Initialize board peripherals — production QSPI + I2C pinout
     let board_periph = init_board(
@@ -39,35 +105,23 @@ async fn main(spawner: Spawner) -> ! {
         p.GPIO40, // TP_RST
     );
 
-    // Initialize RTOS timer
+    // Initialize RTOS timer + extract software interrupts for both cores
+    let sw_int1;
     {
         let timg0 = TimerGroup::new(p.TIMG0);
         let sw_interrupt = SoftwareInterruptControl::new(p.SW_INTERRUPT);
+        sw_int1 = sw_interrupt.software_interrupt1;
         esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
     }
 
     // Initialize WiFi radio + network stack
     let net = system::net::init(p.WIFI).await;
 
-    // De‑assert touch reset (CST9217 driver handles full reset sequence in init())
-    // board_periph.touch_rst.set_high();
-
     // ── I²C bus manager ────────────────────────────────────────────────
     let i2c_bus = mk_static!(
         I2cBus,
         I2cBus::new(board_periph.i2c_bus, esp32::system::board::I2C_FREQ_KHZ)
     );
-
-    // Scan the bus — print every device that ACKs
-    // {
-    //     let scan = i2c_bus.scan().await;
-    //     info!("I2C bus scan:");
-    //     for addr in 1..=0x7Fu8 {
-    //         if scan[addr as usize] {
-    //             info!("  0x{:02X} ACK", addr);
-    //         }
-    //     }
-    // }
 
     // Create one device handle per peripheral — the single source of truth
     let touch_i2c = i2c_bus.device(0x5A, "touch");
@@ -76,38 +130,48 @@ async fn main(spawner: Spawner) -> ! {
     // Spawn WiFi service (connection + network stack tasks)
     services::wifi::register(&spawner, net.controller, net.runner, bus);
 
-    info!("WiFi connecting in background...");
+    info!("WiFi connecting in background…");
 
-    // Create display (consumes the SPI bus + CS + RST pins)
-    let display = services::rendering::display::init_display(
-        board_periph.qspi_bus,
-        board_periph.display_cs,
-        board_periph.display_rst,
-    )
-    .await;
+    // ── Start core 1: rendering + touch ────────────────────────────────
+    {
+        // Allocate core 1's stack from PSRAM heap so it doesn't eat into
+        // core 0's main-thread stack (they share internal DRAM).
+        // let core1_stack: &'static mut Stack<32768> = Box::leak(Box::new(Stack::new()));
+        let core1_stack = CORE1_STACK.init(Stack::new());
+        let render_config = ui::RenderConfig::production();
 
-    // Initialize Slint platform and window
-    let render_config = ui::RenderConfig::production();
-    let window = services::rendering::platform::init_platform(render_config.viewport_size);
+        // Wrap !Send peripherals for cross-core transfer.
+        // ESP32 peripherals are globally addressable; !Send is a type-level
+        // precaution in esp-hal, not a hardware restriction.
+        let qspi = SendWrap(board_periph.qspi_bus);
+        let cs = SendWrap(board_periph.display_cs);
+        let rst = SendWrap(board_periph.display_rst);
+        let t_int = SendWrap(board_periph.touch_int);
+        let t_rst = SendWrap(board_periph.touch_rst);
+        let t_i2c = SendWrap(touch_i2c);
 
-    // Create shared window handle for touch service to dispatch events
-    let shared_window = mk_static!(
-        services::rendering::SharedWindow,
-        services::rendering::SharedWindow::new(core::cell::RefCell::new(None))
-    );
+        start_second_core(p.CPU_CTRL, sw_int1, core1_stack, move || {
+            let executor = CORE1_EXECUTOR.init(Executor::new());
+            executor.run(|core1_spawner| {
+                core1_spawner.spawn(
+                    core1_bootstrap(
+                        core1_spawner,
+                        qspi,
+                        cs,
+                        rst,
+                        t_int,
+                        t_rst,
+                        t_i2c,
+                        render_config,
+                        bus,
+                    )
+                    .unwrap(),
+                );
+            });
+        });
 
-    // Spawn touch service (CST9217 driver + INT-based task)
-    services::touch::register(
-        &spawner,
-        touch_i2c,
-        shared_window,
-        board_periph.touch_int,
-        board_periph.touch_rst,
-        render_config,
-    );
-
-    // Spawn rendering service (display driver + Slint platform + render loop)
-    services::rendering::register(&spawner, render_config, display, shared_window, window, bus);
+        info!("Core 1: started");
+    }
 
     let cipher = crypto::Ascon::new(config::ASCON_KEY);
 

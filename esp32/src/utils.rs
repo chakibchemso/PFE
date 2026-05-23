@@ -18,6 +18,14 @@ macro_rules! mk_static {
     }};
 }
 
+/// Wrapper to move `!Send` peripherals across CPU cores on ESP32.
+///
+/// esp-hal marks most driver types `!Send` as a safety precaution, but on
+/// ESP32 multi-core chips all peripherals are globally addressable from both
+/// cores. This wrapper is the single `unsafe` bridge for cross-core moves.
+pub struct SendWrap<T>(pub T);
+unsafe impl<T> Send for SendWrap<T> {}
+
 pub fn custom_getrandom(buf: &mut [u8]) -> Result<(), getrandom::Error> {
     Rng::new().read(buf);
     Ok(())

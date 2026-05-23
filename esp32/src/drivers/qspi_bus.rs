@@ -15,7 +15,7 @@ use esp_hal::gpio::Output;
 use esp_hal::spi::master::{Address, Command, DataMode, SpiDma, SpiDmaBus};
 
 /// DMA transfer size — matches the board-level DMA buffer capacity.
-const DMA_CHUNK: usize = 32736;
+const DMA_CHUNK: usize = 32736 / 4; // 8192
 
 /// Thin wrapper: raw SPI bus + CS pin, implementing the QSPI Flash-style display interface.
 ///

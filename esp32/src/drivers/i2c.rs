@@ -7,15 +7,15 @@
 
 use defmt::{Debug2Format, trace, warn};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
-use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embedded_hal_async::i2c::{ErrorType, I2c, Operation, SevenBitAddress};
 use esp_hal::{Async, i2c::master::I2c as EspI2c};
 
 // ── Type aliases (backward-compatible with bus.rs) ──────────────────────────
 
-pub type SharedI2cBus = Mutex<NoopRawMutex, EspI2c<'static, Async>>;
-pub type SharedI2cDevice = I2cDevice<'static, NoopRawMutex, EspI2c<'static, Async>>;
+pub type SharedI2cBus = Mutex<CriticalSectionRawMutex, EspI2c<'static, Async>>;
+pub type SharedI2cDevice = I2cDevice<'static, CriticalSectionRawMutex, EspI2c<'static, Async>>;
 pub type BusError = embassy_embedded_hal::shared_bus::I2cDeviceError<esp_hal::i2c::master::Error>;
 
 // ── I2cBus ──────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ pub type BusError = embassy_embedded_hal::shared_bus::I2cDeviceError<esp_hal::i2
 /// Owns the shared [`Mutex`]-wrapped bus. All device handles are created
 /// through [`device`](Self::device) — services never touch the bus directly.
 pub struct I2cBus {
-    bus: Mutex<NoopRawMutex, EspI2c<'static, Async>>,
+    bus: Mutex<CriticalSectionRawMutex, EspI2c<'static, Async>>,
 }
 
 impl I2cBus {
@@ -46,7 +46,7 @@ impl I2cBus {
     pub fn device(&self, addr: u8, name: &'static str) -> I2cPeripheral {
         // SAFETY: I2cBus is only ever placed in a StaticCell via mk_static!,
         // so self.bus is 'static.
-        let bus: &'static Mutex<NoopRawMutex, EspI2c<'static, Async>> =
+        let bus: &'static Mutex<CriticalSectionRawMutex, EspI2c<'static, Async>> =
             unsafe { &*(&self.bus as *const _) };
         I2cPeripheral {
             inner: I2cDevice::new(bus),
@@ -100,7 +100,7 @@ impl I2cBus {
 /// for [`SharedI2cDevice`] with added observability.
 #[derive(Clone)]
 pub struct I2cPeripheral {
-    inner: I2cDevice<'static, NoopRawMutex, EspI2c<'static, Async>>,
+    inner: I2cDevice<'static, CriticalSectionRawMutex, EspI2c<'static, Async>>,
     addr: u8,
     name: &'static str,
 }

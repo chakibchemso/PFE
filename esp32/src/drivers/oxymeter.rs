@@ -180,16 +180,15 @@ impl OxymeterHandle {
         i2c: I2cPeripheral,
         sender: Sender<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
     ) -> Result<Self, BusError> {
-        Timer::after(Duration::from_millis(10000)).await;
-
         let mut sensor = Max3010x::new_max30102(i2c);
+        Timer::after(Duration::from_millis(2000)).await;
 
         sensor.reset().await.unwrap();
         Timer::after(Duration::from_millis(100)).await;
 
         let mut sensor = sensor.into_oximeter().await.unwrap();
 
-        // 400 SPS with Sa4 = 100 Hz effective sample rate
+        // 400 Sps with Sa4 = 100 Hz effective sample rate
         sensor
             .set_sampling_rate(SamplingRate::Sps400)
             .await
