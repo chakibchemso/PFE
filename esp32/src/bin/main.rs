@@ -5,9 +5,10 @@ use defmt::{info, trace};
 use embassy_executor::Spawner;
 use esp_hal::{
     Async,
+    dma::{DmaRxBuf, DmaTxBuf},
     gpio::{Input, Output},
     interrupt::software::SoftwareInterruptControl,
-    spi::master::SpiDmaBus,
+    spi::master::SpiDma,
     system::Stack,
     timer::timg::TimerGroup,
 };
@@ -44,7 +45,9 @@ static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 #[embassy_executor::task]
 async fn core1_bootstrap(
     spawner: Spawner,
-    qspi: SendWrap<SpiDmaBus<'static, Async>>,
+    qspi_spi: SendWrap<SpiDma<'static, Async>>,
+    qspi_rx: SendWrap<DmaRxBuf>,
+    qspi_tx: SendWrap<DmaTxBuf>,
     cs: SendWrap<Output<'static>>,
     rst: SendWrap<Output<'static>>,
     touch_int: SendWrap<Input<'static>>,
@@ -55,7 +58,9 @@ async fn core1_bootstrap(
 ) {
     trace!("Core 1: initializing display…");
 
-    let display = services::rendering::display::init_display(qspi.0, cs.0, rst.0).await;
+    let display =
+        services::rendering::display::init_display(qspi_spi.0, qspi_rx.0, qspi_tx.0, cs.0, rst.0)
+            .await;
     let window = services::rendering::platform::init_platform(render_config.viewport_size);
 
     let shared_window = mk_static!(
@@ -143,7 +148,9 @@ async fn main(spawner: Spawner) -> ! {
         // Wrap !Send peripherals for cross-core transfer.
         // ESP32 peripherals are globally addressable; !Send is a type-level
         // precaution in esp-hal, not a hardware restriction.
-        let qspi = SendWrap(board_periph.qspi_bus);
+        let qspi_spi = SendWrap(board_periph.qspi_spi);
+        let qspi_rx = SendWrap(board_periph.qspi_rx);
+        let qspi_tx = SendWrap(board_periph.qspi_tx);
         let cs = SendWrap(board_periph.display_cs);
         let rst = SendWrap(board_periph.display_rst);
         let t_int = SendWrap(board_periph.touch_int);
@@ -156,7 +163,9 @@ async fn main(spawner: Spawner) -> ! {
                 core1_spawner.spawn(
                     core1_bootstrap(
                         core1_spawner,
-                        qspi,
+                        qspi_spi,
+                        qspi_rx,
+                        qspi_tx,
                         cs,
                         rst,
                         t_int,

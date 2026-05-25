@@ -3,19 +3,207 @@
 use alloc::vec;
 use alloc::vec::Vec;
 use defmt::info;
+use display_driver::DisplayError;
+use display_driver::bus::{DisplayBus, ErrorType, Metadata};
 use display_driver::panel::reset::LCDResetOption;
 use display_driver::{ColorFormat, DisplayDriver, Orientation};
 use display_driver_co5300::Co5300;
 use display_driver_co5300::spec::AM151Q466466LK_151_C;
-use embassy_time::Delay;
+use embassy_time::{Delay, Timer};
+use esp_hal::Async;
+use esp_hal::dma::{DmaRxBuf, DmaTxBuf};
 use esp_hal::gpio::Output;
-use esp_hal::spi::master::SpiDmaBus;
+use esp_hal::spi::master::{Address, Command, DataMode, SpiDma};
 
-use crate::drivers::qspi_bus::SpiDisplayBus;
 use crate::ui::config::PRODUCTION_UI_SIZE;
 
+/// DMA transfer chunk — matches the TX buffer capacity (SPI_DMA_TX_SIZE).
+const DMA_CHUNK: usize = 8184; // 32736 / 4
+
+/// Owns the `SpiDma` peripheral directly — no `SpiDmaBus` wrapper needed
+/// since the display is the only device on this QSPI bus.
+pub struct QspiDisplayBus {
+    spi: Option<SpiDma<'static, Async>>,
+    #[allow(dead_code)]
+    rx_buf: DmaRxBuf,
+    tx_buf: Option<DmaTxBuf>,
+    cs: Output<'static>,
+}
+
+impl QspiDisplayBus {
+    pub fn new(
+        spi: SpiDma<'static, Async>,
+        rx_buf: DmaRxBuf,
+        tx_buf: DmaTxBuf,
+        cs: Output<'static>,
+    ) -> Self {
+        Self {
+            spi: Some(spi),
+            rx_buf,
+            tx_buf: Some(tx_buf),
+            cs,
+        }
+    }
+
+    /// Send a single-SPI write with CS toggling, chunking as needed.
+    async fn raw_write(&mut self, words: &[u8]) -> Result<(), esp_hal::spi::Error> {
+        self.cs.set_low();
+
+        let result = {
+            for chunk in words.chunks(DMA_CHUNK) {
+                let spi = self.spi.take().unwrap();
+                let mut tx_buf = self.tx_buf.take().unwrap();
+
+                tx_buf.as_mut_slice()[..chunk.len()].copy_from_slice(chunk);
+                match spi.half_duplex_write(
+                    DataMode::Single,
+                    Command::None,
+                    Address::None,
+                    0,
+                    chunk.len(),
+                    tx_buf,
+                ) {
+                    Ok(mut transfer) => {
+                        transfer.wait_for_done().await;
+                        let (sd, tb) = transfer.wait();
+                        self.spi = Some(sd);
+                        self.tx_buf = Some(tb);
+                    }
+                    Err((e, sd, tb)) => {
+                        self.spi = Some(sd);
+                        self.tx_buf = Some(tb);
+                        self.cs.set_high();
+                        return Err(e);
+                    }
+                }
+            }
+            Ok(())
+        };
+
+        self.cs.set_high();
+        Timer::after_micros(2).await;
+        result
+    }
+
+    /// Quad-SPI write with command + address header on the first chunk.
+    async fn quad_write(
+        &mut self,
+        flash_cmd: Command,
+        flash_addr: Address,
+        data: &[u8],
+    ) -> Result<(), esp_hal::spi::Error> {
+        let mut spi = self.spi.take().unwrap();
+        let mut tx_buf = self.tx_buf.take().unwrap();
+
+        self.cs.set_low();
+
+        let mut chunks = data.chunks(DMA_CHUNK);
+        let result = {
+            // First chunk carries the command + address.
+            if let Some(first_chunk) = chunks.next() {
+                tx_buf.as_mut_slice()[..first_chunk.len()].copy_from_slice(first_chunk);
+                match spi.half_duplex_write(
+                    DataMode::Quad,
+                    flash_cmd,
+                    flash_addr,
+                    0,
+                    first_chunk.len(),
+                    tx_buf,
+                ) {
+                    Ok(mut transfer) => {
+                        transfer.wait_for_done().await;
+                        (spi, tx_buf) = transfer.wait();
+                    }
+                    Err((e, sd, tb)) => {
+                        self.cs.set_high();
+                        self.spi = Some(sd);
+                        self.tx_buf = Some(tb);
+                        return Err(e);
+                    }
+                }
+            }
+
+            // Remaining chunks: no command/address, pure data continuation.
+            for chunk in chunks {
+                tx_buf.as_mut_slice()[..chunk.len()].copy_from_slice(chunk);
+                match spi.half_duplex_write(
+                    DataMode::Quad,
+                    Command::None,
+                    Address::None,
+                    0,
+                    chunk.len(),
+                    tx_buf,
+                ) {
+                    Ok(mut transfer) => {
+                        transfer.wait_for_done().await;
+                        (spi, tx_buf) = transfer.wait();
+                    }
+                    Err((e, sd, tb)) => {
+                        self.cs.set_high();
+                        self.spi = Some(sd);
+                        self.tx_buf = Some(tb);
+                        return Err(e);
+                    }
+                }
+            }
+
+            Ok(())
+        };
+
+        self.cs.set_high();
+        Timer::after_micros(2).await;
+        self.spi = Some(spi);
+        self.tx_buf = Some(tx_buf);
+        result
+    }
+}
+
+impl ErrorType for QspiDisplayBus {
+    type Error = esp_hal::spi::Error;
+}
+
+impl DisplayBus for QspiDisplayBus {
+    async fn write_cmd(&mut self, cmd: &[u8]) -> Result<(), Self::Error> {
+        // CO5300 in QSPI mode expects commands wrapped in Flash Page Program (0x02).
+        let qspi_cmd = [0x02, 0x00, cmd[0], 0x00];
+        self.raw_write(&qspi_cmd).await
+    }
+
+    async fn write_cmd_with_params(
+        &mut self,
+        cmd: &[u8],
+        params: &[u8],
+    ) -> Result<(), Self::Error> {
+        // Wrap in Flash Page Program frame; raw_write handles chunking.
+        let mut buf = alloc::vec::Vec::with_capacity(4 + params.len());
+        buf.extend_from_slice(&[0x02, 0x00, cmd[0], 0x00]);
+        buf.extend_from_slice(params);
+        self.raw_write(&buf).await
+    }
+
+    async fn write_pixels(
+        &mut self,
+        cmd: &[u8],
+        data: &[u8],
+        _metadata: Metadata,
+    ) -> Result<(), DisplayError<Self::Error>> {
+        // 0x32 = Quad Input Page Program (QSPI 4-line data phase)
+        let flash_cmd = Command::_8Bit(0x32, DataMode::Single);
+        let addr_val = u32::from(cmd[0]) << 8;
+        let flash_addr = Address::_24Bit(addr_val, DataMode::Single);
+
+        self.quad_write(flash_cmd, flash_addr, data)
+            .await
+            .map_err(DisplayError::BusError)
+    }
+
+    fn set_reset(&mut self, _reset: bool) -> Result<(), DisplayError<Self::Error>> {
+        Err(DisplayError::Unsupported)
+    }
+}
+
 /// Full bus: raw QSPI, no TE gating.
-pub type ProductionBus = SpiDisplayBus;
+pub type ProductionBus = QspiDisplayBus;
 
 /// The CO5300 panel driver for the 466x466 AM151 panel.
 pub type ProductionPanel = Co5300<AM151Q466466LK_151_C, Output<'static>, ProductionBus>;
@@ -25,13 +213,15 @@ pub type SmartWatchDisplay = DisplayDriver<ProductionBus, ProductionPanel>;
 
 /// Construct and initialise the CO5300 AMOLED display.
 pub async fn init_display(
-    spi_bus: SpiDmaBus<'static, esp_hal::Async>,
+    spi: SpiDma<'static, Async>,
+    rx_buf: DmaRxBuf,
+    tx_buf: DmaTxBuf,
     cs: Output<'static>,
     rst: Output<'static>,
 ) -> SmartWatchDisplay {
     info!("display: building bus...");
 
-    let qspi = SpiDisplayBus::new(spi_bus, cs);
+    let qspi = QspiDisplayBus::new(spi, rx_buf, tx_buf, cs);
     let reset = LCDResetOption::PinLow(rst);
     let panel: Co5300<AM151Q466466LK_151_C, Output<'static>, _> = Co5300::new(reset);
 

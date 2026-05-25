@@ -36,7 +36,7 @@ use esp_hal::{
     i2c::master::{BusTimeout, Config as I2cConfig, I2c},
     peripherals,
     psram::{FlashFreq, PsramConfig, PsramMode, PsramSize, SpiRamFreq, SpiTimingConfigCoreClock},
-    spi::master::{Config as SpiConfig, Spi, SpiDmaBus},
+    spi::master::{Config as SpiConfig, Spi, SpiDma},
     time::Rate,
 };
 
@@ -62,7 +62,9 @@ pub const I2C_FREQ_KHZ: u32 = 400;
 /// Initialized board peripherals for the production board
 pub struct BoardPeripherals {
     pub i2c_bus: I2c<'static, Async>,
-    pub qspi_bus: SpiDmaBus<'static, Async>,
+    pub qspi_spi: SpiDma<'static, Async>,
+    pub qspi_rx: DmaRxBuf,
+    pub qspi_tx: DmaTxBuf,
     pub display_cs: Output<'static>,
     pub display_rst: Output<'static>,
     pub display_te: Input<'static>,
@@ -157,6 +159,10 @@ pub fn init_board(
     .with_buffers(dma_rx_buf, dma_tx_buf)
     .into_async();
 
+    // Single device on this bus — split immediately. The display driver owns
+    // SpiDma directly and uses native half_duplex_write for QSPI transfers.
+    let (qspi_spi, qspi_rx, qspi_tx) = qspi_bus.split();
+
     // --- I2C setup (shared bus for touch + GPS + sensors) ---
     let i2c_bus = I2c::new(
         i2c0,
@@ -171,7 +177,9 @@ pub fn init_board(
 
     BoardPeripherals {
         i2c_bus,
-        qspi_bus,
+        qspi_spi,
+        qspi_rx,
+        qspi_tx,
         display_cs,
         display_rst,
         display_te,
