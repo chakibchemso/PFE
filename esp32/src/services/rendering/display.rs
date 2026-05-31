@@ -211,6 +211,34 @@ pub type ProductionPanel = Co5300<AM151Q466466LK_151_C, Output<'static>, Product
 /// Top-level display handle used by the rendering pipeline.
 pub type SmartWatchDisplay = DisplayDriver<ProductionBus, ProductionPanel>;
 
+/// Wrapper that implements oxivgl's [`DisplayOutput`] for the CO5300 display.
+///
+/// SAFETY: `SmartWatchDisplay` contains `Spi<Async>` which is `!Send` in esp-hal
+/// (PhantomData<*const ()>). On single-core ESP32 or when display ops are pinned
+/// to one core, this is safe — the peripheral is globally addressable hardware.
+pub struct OxivglDisplay(pub SmartWatchDisplay);
+
+// SAFETY: see struct doc comment.
+unsafe impl Send for OxivglDisplay {}
+
+impl oxivgl::flush_pipeline::DisplayOutput for OxivglDisplay {
+    async fn show_raw_data(
+        &mut self,
+        x: u16,
+        y: u16,
+        w: u16,
+        h: u16,
+        data: &[u8],
+    ) -> Result<(), oxivgl::flush_pipeline::UiError> {
+        let area = display_driver::Area::new(x, y, w, h);
+        let fc = display_driver::bus::FrameControl::new_standalone();
+        self.0
+            .write_pixels(area, fc, data)
+            .await
+            .map_err(|_| oxivgl::flush_pipeline::UiError::Display)
+    }
+}
+
 /// Construct and initialise the CO5300 AMOLED display.
 pub async fn init_display(
     spi: SpiDma<'static, Async>,

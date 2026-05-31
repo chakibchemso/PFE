@@ -7,7 +7,6 @@ use esp_radio::wifi::{Interface, WifiController};
 use crate::app::bus::SystemBus;
 
 mod task;
-pub mod ui;
 
 use task::{connection_task, net_task};
 

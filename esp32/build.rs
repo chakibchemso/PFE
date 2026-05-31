@@ -1,16 +1,8 @@
 fn main() {
-    compile_slint();
     linker_be_nice();
     println!("cargo:rustc-link-arg-tests=-Tembedded-test.x");
     println!("cargo:rustc-link-arg=-Tdefmt.x");
     println!("cargo:rustc-link-arg=-Tlinkall.x");
-}
-
-fn compile_slint() {
-    let config = slint_build::CompilerConfiguration::new()
-        .embed_resources(slint_build::EmbedResourcesKind::EmbedForSoftwareRenderer);
-
-    slint_build::compile_with_config("src/ui/os.slint", config).unwrap();
 }
 
 fn linker_be_nice() {
@@ -24,26 +16,26 @@ fn linker_be_nice() {
                 what if what.starts_with("_defmt_") => {
                     eprintln!();
                     eprintln!(
-                        "💡 `defmt` not found - make sure `defmt.x` is added as a linker script and you have included `use defmt_rtt as _;`"
+                        "\u{1f4a1} `defmt` not found - make sure `defmt.x` is added as a linker script and you have included `use defmt_rtt as _;`"
                     );
                     eprintln!();
                 }
                 "_stack_start" => {
                     eprintln!();
-                    eprintln!("💡 Is the linker script `linkall.x` missing?");
+                    eprintln!("\u{1f4a1} Is the linker script `linkall.x` missing?");
                     eprintln!();
                 }
                 what if what.starts_with("esp_rtos_") => {
                     eprintln!();
                     eprintln!(
-                        "💡 `esp-radio` has no scheduler enabled. Make sure you have initialized `esp-rtos` or provided an external scheduler."
+                        "\u{1f4a1} `esp-radio` has no scheduler enabled. Make sure you have initialized `esp-rtos` or provided an external scheduler."
                     );
                     eprintln!();
                 }
                 "embedded_test_linker_file_not_added_to_rustflags" => {
                     eprintln!();
                     eprintln!(
-                        "💡 `embedded-test` not found - make sure `embedded-test.x` is added as a linker script for tests"
+                        "\u{1f4a1} `embedded-test` not found - make sure `embedded-test.x` is added as a linker script for tests"
                     );
                     eprintln!();
                 }
@@ -57,13 +49,12 @@ fn linker_be_nice() {
                 | "free_internal" => {
                     eprintln!();
                     eprintln!(
-                        "💡 Did you forget the `esp-alloc` dependency or didn't enable the `compat` feature on it?"
+                        "\u{1f4a1} Did you forget the `esp-alloc` dependency or didn't enable the `compat` feature on it?"
                     );
                     eprintln!();
                 }
                 _ => (),
             },
-            // we don't have anything helpful for "missing-lib" yet
             _ => {
                 std::process::exit(1);
             }

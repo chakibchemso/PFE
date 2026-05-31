@@ -11,8 +11,6 @@ pub mod die_temp;
 pub mod driver;
 pub mod pipeline;
 pub mod task;
-pub mod ui;
-
 use driver::OxymeterHandle;
 use pipeline::pipeline_task;
 

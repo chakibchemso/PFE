@@ -7,6 +7,12 @@ DEFMT_LOG = "info"
 # Tell esp-hal to compile the PSRAM driver in Octal mode
 # ESP_HAL_CONFIG_PSRAM_MODE = "octal"
 
+# Path to lv_conf.h for oxivgl-sys
+DEP_LV_CONFIG_PATH = { value = "./lv_conf/", relative = true }
+
+# point CC to the esp compiler
+CC_xtensa_esp32s3_none_elf = "xtensa-esp32s3-elf-gcc"
+
 [build]
 target = "xtensa-esp32s3-none-elf"
 rustflags = ["-C", "link-arg=-nostartfiles"]

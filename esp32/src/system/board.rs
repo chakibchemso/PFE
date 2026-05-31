@@ -131,16 +131,14 @@ pub fn init_board(
     // --- QSPI setup (SPI2 with quad I/O lines) ---
     let (rx_descriptors, tx_descriptors) = dma_descriptors!(SPI_DMA_RX_SIZE, SPI_DMA_TX_SIZE);
     // Buffer memory is in .bss — already zeroed by CRT. No stack temporary.
-    let dma_rx_buf = DmaRxBuf::new(
-        rx_descriptors,
-        unsafe { DMA_RX_BUF.init(MaybeUninit::uninit()).assume_init_mut() },
-    )
+    let dma_rx_buf = DmaRxBuf::new(rx_descriptors, unsafe {
+        DMA_RX_BUF.init(MaybeUninit::uninit()).assume_init_mut()
+    })
     .unwrap();
 
-    let dma_tx_buf = DmaTxBuf::new(
-        tx_descriptors,
-        unsafe { DMA_TX_BUF.init(MaybeUninit::uninit()).assume_init_mut() },
-    )
+    let dma_tx_buf = DmaTxBuf::new(tx_descriptors, unsafe {
+        DMA_TX_BUF.init(MaybeUninit::uninit()).assume_init_mut()
+    })
     .unwrap();
 
     let qspi_bus = Spi::new(

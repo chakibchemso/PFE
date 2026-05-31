@@ -6,7 +6,7 @@ use embassy_executor::Spawner;
 use esp_hal::{
     Async,
     dma::{DmaRxBuf, DmaTxBuf},
-    gpio::{Input, Output},
+    gpio::Output,
     interrupt::software::SoftwareInterruptControl,
     spi::master::SpiDma,
     system::Stack,
@@ -33,55 +33,51 @@ getrandom::register_custom_getrandom!(utils::custom_getrandom);
 /// Stack for core 1's scheduler + embassy executor + Slint rendering pipeline.
 static CORE1_STACK: StaticCell<Stack<65536>> = StaticCell::new();
 
-/// Thread-mode executor for core 1 (rendering + touch).
+/// Thread-mode executor for core 1 (LVGL render loop + touch).
 static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 // ── Core 1 bootstrap ──────────────────────────────────────────────────────
 
-/// One-shot init for core 1: display, Slint platform, touch + rendering.
+/// One-shot init for core 1: display, LVGL flush pipeline, touch + rendering.
 ///
-/// Runs once at startup, spawns the persistent touch and rendering tasks,
-/// then enters an idle loop to keep the executor alive.
+/// Runs once at startup, spawns the persistent flush, render, and touch tasks.
 #[embassy_executor::task]
 async fn core1_bootstrap(
     spawner: Spawner,
+    hi_spawner: embassy_executor::SendSpawner,
     qspi_spi: SendWrap<SpiDma<'static, Async>>,
     qspi_rx: SendWrap<DmaRxBuf>,
     qspi_tx: SendWrap<DmaTxBuf>,
     cs: SendWrap<Output<'static>>,
     rst: SendWrap<Output<'static>>,
-    touch_int: SendWrap<Input<'static>>,
     touch_rst: SendWrap<Output<'static>>,
     touch_i2c: SendWrap<I2cPeripheral>,
     render_config: ui::RenderConfig,
-    bus: &'static SystemBus,
 ) {
-    trace!("Core 1: initializing display…");
+    trace!("Core 1: initialising display…");
 
     let display =
-        services::rendering::display::init_display(qspi_spi.0, qspi_rx.0, qspi_tx.0, cs.0, rst.0)
-            .await;
-    let window = services::rendering::platform::init_platform(render_config.viewport_size);
+        services::rendering::init_display(qspi_spi.0, qspi_rx.0, qspi_tx.0, cs.0, rst.0).await;
+    let oxivgl_display = services::rendering::OxivglDisplay(display);
 
-    let shared_window = mk_static!(
-        services::rendering::SharedWindow,
-        services::rendering::SharedWindow::new(core::cell::RefCell::new(None))
+    // 1. Spawn flush task on high-priority interrupt executor.
+    services::rendering::register_flush(&hi_spawner, oxivgl_display);
+
+    // 2. Allocate LVGL double-buffers (DMA-aligned, 'static lifetime).
+    let bufs = services::rendering::task::take_lvgl_buffers();
+
+    // 3. Spawn LVGL render task on thread-mode executor.
+    spawner.spawn(services::rendering::task::render_task(bufs).unwrap());
+
+    // 4. Spawn touch task on thread-mode executor.
+    spawner.spawn(
+        services::touch::task::touch_task(touch_i2c.0, touch_rst.0, render_config)
+            .unwrap(),
     );
 
-    services::touch::register(
-        &spawner,
-        touch_i2c.0,
-        shared_window,
-        touch_int.0,
-        touch_rst.0,
-        render_config,
-    );
+    info!("Core 1: LVGL + flush + touch running");
 
-    services::rendering::register(&spawner, render_config, display, shared_window, window, bus);
-
-    info!("Core 1: rendering + touch running");
-
-    // Keep the executor alive — no further work for this bootstrap task
+    // Keep the executor alive
     loop {
         embassy_time::Timer::after_secs(60).await;
     }
@@ -110,12 +106,14 @@ async fn main(spawner: Spawner) -> ! {
         p.GPIO40, // TP_RST
     );
 
-    // Initialize RTOS timer + extract software interrupts for both cores
+    // Initialize RTOS timer + extract software interrupts
     let sw_int1;
+    let sw_int2;
     {
-        let timg0 = TimerGroup::new(p.TIMG0);
         let sw_interrupt = SoftwareInterruptControl::new(p.SW_INTERRUPT);
         sw_int1 = sw_interrupt.software_interrupt1;
+        sw_int2 = sw_interrupt.software_interrupt2;
+        let timg0 = TimerGroup::new(p.TIMG0);
         esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
     }
 
@@ -128,51 +126,50 @@ async fn main(spawner: Spawner) -> ! {
         I2cBus::new(board_periph.i2c_bus, esp32::system::board::I2C_FREQ_KHZ)
     );
 
-    // Create one device handle per peripheral — the single source of truth
+    // Create one device handle per peripheral
     let touch_i2c = i2c_bus.device(0x5A, "touch");
     let oxymeter_i2c = i2c_bus.device(0x57, "oxymeter");
 
     // Spawn WiFi service (connection + network stack tasks)
     services::wifi::register(&spawner, net.controller, net.runner, bus);
-
     info!("WiFi connecting in background…");
 
-    // ── Start core 1: rendering + touch ────────────────────────────────
+    // ── Start core 1: LVGL rendering + flush + touch ───────────────────
     {
-        // Allocate core 1's stack from PSRAM heap so it doesn't eat into
-        // core 0's main-thread stack (they share internal DRAM).
-        // let core1_stack: &'static mut Stack<32768> = Box::leak(Box::new(Stack::new()));
         let core1_stack = CORE1_STACK.init(Stack::new());
         let render_config = ui::RenderConfig::production();
 
         // Wrap !Send peripherals for cross-core transfer.
-        // ESP32 peripherals are globally addressable; !Send is a type-level
-        // precaution in esp-hal, not a hardware restriction.
         let qspi_spi = SendWrap(board_periph.qspi_spi);
         let qspi_rx = SendWrap(board_periph.qspi_rx);
         let qspi_tx = SendWrap(board_periph.qspi_tx);
         let cs = SendWrap(board_periph.display_cs);
         let rst = SendWrap(board_periph.display_rst);
-        let t_int = SendWrap(board_periph.touch_int);
         let t_rst = SendWrap(board_periph.touch_rst);
         let t_i2c = SendWrap(touch_i2c);
 
         start_second_core(p.CPU_CTRL, sw_int1, core1_stack, move || {
             let executor = CORE1_EXECUTOR.init(Executor::new());
             executor.run(|core1_spawner| {
+                // Create interrupt executor for the flush task.
+                let int_exec = mk_static!(
+                    esp_rtos::embassy::InterruptExecutor::<2>,
+                    esp_rtos::embassy::InterruptExecutor::new(sw_int2)
+                );
+                let hi_spawner = int_exec.start(esp_hal::interrupt::Priority::min());
+
                 core1_spawner.spawn(
                     core1_bootstrap(
                         core1_spawner,
+                        hi_spawner,
                         qspi_spi,
                         qspi_rx,
                         qspi_tx,
                         cs,
                         rst,
-                        t_int,
                         t_rst,
                         t_i2c,
                         render_config,
-                        bus,
                     )
                     .unwrap(),
                 );

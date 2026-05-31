@@ -1,5 +1,3 @@
-use slint::LogicalPosition;
-
 /// Production display size (466x466 round AMOLED)
 pub const PRODUCTION_UI_SIZE: u16 = 466;
 
@@ -7,9 +5,7 @@ pub const PRODUCTION_UI_SIZE: u16 = 466;
 const MAX_MASK_SIZE: usize = 466;
 
 /// Precomputed round mask: each row stores (start_x, end_x) for valid pixels
-/// This avoids per-row sqrt computation during rendering
 pub struct RoundMaskLUT {
-    /// For each row y, stores (start_x, end_x) inclusive range of valid pixels
     pub row_ranges: [(u16, u16); MAX_MASK_SIZE],
     pub size: u16,
 }
@@ -26,7 +22,7 @@ impl RoundMaskLUT {
             let max_dx2 = radius2 - dy2;
 
             if max_dx2 < 0 {
-                row_ranges[y] = (0, 0); // Entire row outside circle
+                row_ranges[y] = (0, 0);
             } else {
                 let half_width = libm::sqrtf(max_dx2 as f32) as i32;
                 let start_x = (radius - half_width).max(0) as u16;
@@ -38,7 +34,6 @@ impl RoundMaskLUT {
         Self { row_ranges, size }
     }
 
-    /// Check if a pixel is inside the round mask
     #[inline]
     pub fn is_inside(&self, x: u32, y: u32) -> bool {
         if y >= self.size as u32 || x >= self.size as u32 {
@@ -66,7 +61,6 @@ pub struct RenderConfig {
 }
 
 impl RenderConfig {
-    /// Config for the production round CO5300 display (466x466, no panel offset)
     pub const fn production() -> Self {
         Self {
             panel_width: PRODUCTION_UI_SIZE,
@@ -84,66 +78,29 @@ impl RenderConfig {
     }
 
     /// Map touch coordinates to viewport space.
-    ///
-    /// The CST9217 driver already applies swap/mirror transformations,
-    /// so this only handles the viewport offset and round mask.
-    pub fn map_touch_to_viewport(&self, x: u16, y: u16) -> Option<LogicalPosition> {
-        let local_x = x as i32 - self.viewport_offset_x as i32;
-        let local_y = y as i32 - self.viewport_offset_y as i32;
-        if local_x < 0
-            || local_y < 0
-            || local_x >= self.viewport_size as i32
-            || local_y >= self.viewport_size as i32
+    /// Returns (x, y) in LVGL pixel coordinates, or None if outside the viewport.
+    pub fn map_touch_to_viewport(&self, x: u16, y: u16) -> Option<(u16, u16)> {
+        if x < self.viewport_offset_x
+            || y < self.viewport_offset_y
+            || x >= self.viewport_offset_x + self.viewport_size
+            || y >= self.viewport_offset_y + self.viewport_size
         {
             return None;
         }
 
+        let local_x = x - self.viewport_offset_x;
+        let local_y = y - self.viewport_offset_y;
+
         if self.round_mask {
             let radius = self.viewport_size as i32 / 2;
             let center = radius;
-            let dx = local_x - center;
-            let dy = local_y - center;
+            let dx = local_x as i32 - center;
+            let dy = local_y as i32 - center;
             if dx * dx + dy * dy > radius * radius {
                 return None;
             }
         }
 
-        Some(LogicalPosition::new(local_x as f32, local_y as f32))
-    }
-
-    /// Apply round mask to a specific rectangular region of the framebuffer,
-    /// zeroing pixels outside the circle using precomputed LUT.
-    pub fn apply_round_mask_rect(
-        &self,
-        mask_lut: &RoundMaskLUT,
-        pixels: &mut [slint::platform::software_renderer::Rgb565Pixel],
-        x: u32,
-        y: u32,
-        w: u32,
-        h: u32,
-    ) {
-        if !self.round_mask {
-            return;
-        }
-
-        let black = slint::platform::software_renderer::Rgb565Pixel(0);
-
-        for row in 0..h {
-            let vy = y + row;
-            if vy >= self.viewport_size as u32 {
-                continue;
-            }
-
-            let (start_x, end_x) = mask_lut.row_ranges[vy as usize];
-            let row_offset = (vy as usize) * self.viewport_size as usize;
-
-            // Only black pixels in the rect that are outside the circle
-            for col in 0..w {
-                let vx = x + col;
-                if vx < start_x as u32 || vx > end_x as u32 {
-                    pixels[row_offset + vx as usize] = black;
-                }
-            }
-        }
+        Some((local_x, local_y))
     }
 }

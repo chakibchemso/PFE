@@ -5,12 +5,13 @@
 //! wakeups when the panel is idle.
 
 use embassy_time::{Delay, Duration, Timer};
+use esp_hal::gpio::Output;
 
 use crate::drivers::bus::{BusError, I2cPeripheral};
 use crate::drivers::low::cst9217::{Cst9217, Error as CstError};
 use crate::ui::config::RenderConfig;
 
-pub type Cst9217Touch = Cst9217<I2cPeripheral, Delay, esp_hal::gpio::Output<'static>>;
+pub type Cst9217Touch = Cst9217<I2cPeripheral, Delay, Output<'static>>;
 
 /// Number of init retry attempts before giving up.
 const INIT_RETRIES: u8 = 3;
@@ -27,7 +28,7 @@ impl TouchDevice {
     pub async fn new(
         i2c: I2cPeripheral,
         delay: Delay,
-        touch_rst: esp_hal::gpio::Output<'static>,
+        touch_rst: Output<'static>,
         config: &RenderConfig,
     ) -> Result<Self, CstError<BusError>> {
         // Create the driver once — delay and touch_rst are not Copy, so

@@ -38,13 +38,8 @@ rust-mqtt = { version = "0.5", default-features = false, features = [
 # gps
 nmea = { version = "0.7", default-features = false, features = ["GNSS", "defmt-03"] }
 # ui
-embedded-graphics = "0.8"
-slint = { version = "1.16", default-features = false, features = [
-  "unsafe-single-threaded",
-  "compat-1-2",
-  "libm",
-  "renderer-software",
-] }
+oxivgl = { version = "0.1.2", features = ["esp-hal"] }
+oxivgl-sys = "0.1.2"
 
 # ! ### espressif crates ###
 # provides the bootloader and app description for flashing
@@ -54,7 +49,6 @@ esp-hal = { version = "~1.1", features = [
   "defmt",
   "esp32s3",
   "unstable",
-  # "psram",
 ] }
 # provides heap mem allocation for the ESP32
 esp-alloc = { version = "0.10", features = ["defmt"] }
@@ -73,7 +67,6 @@ esp-radio = { version = "0.18", features = [
   "ble",
   "coex",
   "esp-alloc",
-  # "smoltcp",
   "unstable",
   "wifi",
 ] }
@@ -135,15 +128,14 @@ display-driver-co5300 = "0.1"
 
 # ! ### utility crates ###
 # self explanatory
+embedded-graphics = "0.8"
 critical-section = "1.2.0"
 # fucking self explanatory
 static_cell = "2.1.1"
 libm = "0.2.16"
 nb = "1.1.0"
 max3010x-async = { version = "0.1.0", path = "../crates/max3010x-async" }
-# TODO: why? just why!
-# embedded-io = { version = "0.7.1", features = ["defmt"] }
-# embedded-io-async = { version = "0.7.0", features = ["defmt"] }
+
 
 [dev-dependencies]
 embedded-test = { version = "0.7", features = [
@@ -154,13 +146,12 @@ embedded-test = { version = "0.7", features = [
 ] }
 
 [build-dependencies]
-slint-build = "1.5"
 
 [profile.dev]
 opt-level = "s"
 
 [profile.release]
-codegen-units = 1        # LLVM can perform better optimizations using a single thread
+codegen-units = 1
 debug = 2
 debug-assertions = false
 incremental = false

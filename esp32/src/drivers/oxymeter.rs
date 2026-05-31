@@ -1,4 +1,4 @@
-use defmt::println;
+use defmt::trace;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::Sender;
@@ -111,7 +111,7 @@ impl OxymeterRunner {
             }
 
             let elapsed = Instant::now().as_micros() - chrono;
-            println!(
+            trace!(
                 "DSP: Samples: {=u8}, Loop: {=u64} us, Read: {=u64} us, Process: {=u64} us",
                 sample_count,
                 elapsed,
