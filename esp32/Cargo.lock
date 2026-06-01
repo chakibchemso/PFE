@@ -2015,12 +2015,10 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "oxivgl"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "677fa1385f2164b251efde0197af7a92172c44f4f78a44de92a69b92d4fd1152"
 dependencies = [
  "cfg-if",
  "critical-section",
- "embassy-sync 0.7.2",
+ "embassy-sync 0.8.0",
  "embassy-time",
  "esp-hal",
  "heapless 0.9.3",
@@ -2032,8 +2030,6 @@ dependencies = [
 [[package]]
 name = "oxivgl-build"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45332a4e9ede90ad8cbe5feac9a7912e62902666b7a950b7cd66e0ddccb841c2"
 dependencies = [
  "cc",
 ]
@@ -2041,8 +2037,6 @@ dependencies = [
 [[package]]
 name = "oxivgl-sys"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "745746a211feb6a029ca1bdc78be60fa9ab79e4c3384c5497b4dfcc1a50cb52d"
 dependencies = [
  "bindgen",
  "cc",

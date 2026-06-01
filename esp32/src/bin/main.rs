@@ -53,6 +53,7 @@ async fn core1_bootstrap(
     touch_rst: SendWrap<Output<'static>>,
     touch_i2c: SendWrap<I2cPeripheral>,
     render_config: ui::RenderConfig,
+    bus: &'static SystemBus,
 ) {
     trace!("Core 1: initialising display…");
 
@@ -61,13 +62,16 @@ async fn core1_bootstrap(
     let oxivgl_display = services::rendering::OxivglDisplay(display);
 
     // 1. Spawn flush task on high-priority interrupt executor.
+    //    The flush task wraps the display in a `BrightnessDisplay` that handles
+    //    brightness updates between LVGL frame stripes.
     services::rendering::register_flush(&hi_spawner, oxivgl_display);
 
     // 2. Allocate LVGL double-buffers (DMA-aligned, 'static lifetime).
     let bufs = services::rendering::task::take_lvgl_buffers();
 
-    // 3. Spawn LVGL render task on thread-mode executor.
-    spawner.spawn(services::rendering::task::render_task(bufs).unwrap());
+    // 3. Get a vitals receiver for the UI and spawn the render task.
+    let vitals_rx = bus.vitals.receiver();
+    spawner.spawn(services::ui::task::render_task(bufs, vitals_rx).unwrap());
 
     // 4. Spawn touch task on thread-mode executor.
     spawner.spawn(
@@ -170,6 +174,7 @@ async fn main(spawner: Spawner) -> ! {
                         t_rst,
                         t_i2c,
                         render_config,
+                        bus,
                     )
                     .unwrap(),
                 );

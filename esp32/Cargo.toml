@@ -147,6 +147,10 @@ embedded-test = { version = "0.7", features = [
 
 [build-dependencies]
 
+[patch.crates-io]
+oxivgl = { path = "tmp/oxivgl" }
+oxivgl-sys = { path = "tmp/oxivgl/oxivgl-sys" }
+
 [profile.dev]
 opt-level = "s"
 

@@ -14,4 +14,5 @@ pub mod rendering;
 pub mod sensing;
 pub mod storage;
 pub mod touch;
+pub mod ui;
 pub mod wifi;

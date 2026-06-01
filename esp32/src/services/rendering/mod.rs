@@ -3,7 +3,7 @@ pub mod lvgl_alloc;
 pub mod task;
 
 pub use display::{OxivglDisplay, SmartWatchDisplay, init_display};
-pub use task::{HelloView, LVGL_BUF_BYTES, SCREEN_H, SCREEN_W, flush_task, render_task};
+pub use task::{LVGL_BUF_BYTES, SCREEN_H, SCREEN_W, flush_task, take_lvgl_buffers};
 
 use embassy_executor::SendSpawner;
 
