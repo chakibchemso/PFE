@@ -41,12 +41,16 @@ pub struct SystemBus {
     pub vitals: Watch<CriticalSectionRawMutex, (u8, u8, u8), 2>,
     /// WiFi connectivity state
     pub wifi_status: Watch<CriticalSectionRawMutex, bool, 2>,
+    /// MQTT broker connectivity state
+    pub mqtt_status: Watch<CriticalSectionRawMutex, bool, 2>,
     /// GPS fix data
     pub gps: Watch<CriticalSectionRawMutex, Option<GpsFix>, 2>,
     /// Encrypted payload queue (sensing → MQTT)
     pub data_channel: Channel<CriticalSectionRawMutex, Vec<u8>, 5>,
     /// ESP32 die temperature in Celsius
     pub cpu_temp: Watch<CriticalSectionRawMutex, i8, 2>,
+    /// UTC epoch seconds, updated by the NTP sync service
+    pub utc_epoch: Watch<CriticalSectionRawMutex, u64, 2>,
 }
 
 impl SystemBus {
@@ -54,9 +58,11 @@ impl SystemBus {
         Self {
             vitals: Watch::new(),
             wifi_status: Watch::new(),
+            mqtt_status: Watch::new(),
             gps: Watch::new(),
             data_channel: Channel::new(),
             cpu_temp: Watch::new(),
+            utc_epoch: Watch::new(),
         }
     }
 }

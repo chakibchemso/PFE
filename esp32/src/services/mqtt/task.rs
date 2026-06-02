@@ -4,6 +4,7 @@ use defmt::{error, info, trace, warn};
 use embassy_net::{Stack, dns::DnsQueryType, tcp::TcpSocket};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Receiver;
+use embassy_sync::watch::Sender;
 use embassy_time::{Duration, Timer};
 use rust_mqtt::{
     Bytes,
@@ -31,7 +32,9 @@ const BACKOFF_MAX_MS: u64 = 60_000;
 pub async fn mqtt_task(
     stack: Stack<'static>,
     data_receiver: Receiver<'static, CriticalSectionRawMutex, Vec<u8>, 5>,
+    mqtt_status: Sender<'static, CriticalSectionRawMutex, bool, 2>,
 ) -> ! {
+    mqtt_status.send(false);
     let mut backoff_ms = BACKOFF_INITIAL_MS;
 
     loop {
@@ -72,6 +75,7 @@ pub async fn mqtt_task(
 
         if let Err(e) = socket.connect((broker_ip, config::MQTT_PORT)).await {
             warn!("TCP Connect failed: {:?}", e);
+            mqtt_status.send(false);
             Timer::after(Duration::from_millis(backoff_ms)).await;
             backoff_ms = core::cmp::min(backoff_ms * 2, BACKOFF_MAX_MS);
             continue;
@@ -114,7 +118,10 @@ pub async fn mqtt_task(
         };
 
         match client.connect(socket, &connect_options, client_id).await {
-            Ok(_) => info!("MQTT Connected!"),
+            Ok(_) => {
+                info!("MQTT Connected!");
+                mqtt_status.send(true);
+            }
             Err(_e) => {
                 error!("MQTT Connection failed");
                 Timer::after(Duration::from_millis(backoff_ms)).await;
@@ -140,6 +147,7 @@ pub async fn mqtt_task(
                     Ok(_) => trace!("Published successfully"),
                     Err(_) => {
                         error!("Publish failed");
+                        mqtt_status.send(false);
                         break; // Reconnect on publish failure
                     }
                 }

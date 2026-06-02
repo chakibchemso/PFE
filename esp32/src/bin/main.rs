@@ -61,12 +61,15 @@ async fn core1_bootstrap(
         services::rendering::init_display(qspi_spi.0, qspi_rx.0, qspi_tx.0, cs.0, rst.0).await;
     let send_display = services::rendering::SendDisplay(display);
 
-    // Get a vitals receiver for the UI.
+    // Get receivers for the UI.
     let vitals_rx = bus.vitals.receiver();
+    let wifi_rx = bus.wifi_status.receiver();
+    let mqtt_rx = bus.mqtt_status.receiver();
+    let utc_rx = bus.utc_epoch.receiver();
 
     // Spawn the render task — it initialises LVGL, registers the flush
     // pipeline + touch indev, creates the UI, and runs the main loop.
-    spawner.spawn(services::ui::task::render_task(hi_spawner, send_display, vitals_rx).unwrap());
+    spawner.spawn(services::ui::task::render_task(spawner, hi_spawner, send_display, vitals_rx, wifi_rx, mqtt_rx, utc_rx).unwrap());
 
     // Spawn touch polling task on thread-mode executor (feeds atomics
     // that the LVGL indev reads inside lv_timer_handler).
@@ -131,6 +134,9 @@ async fn main(spawner: Spawner) -> ! {
     // Spawn WiFi service (connection + network stack tasks)
     services::wifi::register(&spawner, net.controller, net.runner, bus);
     info!("WiFi connecting in background…");
+
+    // Spawn NTP time sync (will sync once WiFi is up)
+    services::time::register(&spawner, net.stack, bus);
 
     // ── Start core 1: LVGL rendering + flush + touch ───────────────────
     {

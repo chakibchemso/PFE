@@ -9,15 +9,28 @@ use embassy_sync::watch::Receiver;
 use embassy_time::{Duration, Timer};
 use lv_bevy_ecs::functions::{NextTimerPeriod, lv_init, lv_tick_set_cb, lv_timer_handler};
 
+use embassy_executor::Spawner;
+
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{DISPLAY_READY, flush_task, init_lvgl_display};
 use crate::services::touch;
+use crate::services::ui::watch_task;
 use crate::ui::layout::{self, apply_theme};
 use crate::ui::theme::CURRENT_THEME;
+use crate::utils::SendWrap;
 
 /// Receiver for vitals data (heart rate, SpO2, temperature) from the sensing
 /// pipeline. Polled each render tick.
 type VitalsReceiver = Receiver<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>;
+
+/// Receiver for wifi connection state.
+type WifiReceiver = Receiver<'static, CriticalSectionRawMutex, bool, 2>;
+
+/// Receiver for MQTT broker connection state.
+type MqttReceiver = Receiver<'static, CriticalSectionRawMutex, bool, 2>;
+
+/// Receiver for UTC epoch from NTP sync.
+type UtcReceiver = Receiver<'static, CriticalSectionRawMutex, u64, 2>;
 
 /// Set an LVGL label to a formatted value, e.g. `set_label(handle, 72, " BPM")`
 /// produces `"72 BPM"`. Uses `lv_label_set_text` directly with a stack buffer.
@@ -52,9 +65,13 @@ fn set_label_u8(handle: *mut lv_bevy_ecs::sys::lv_obj_t, val: u8, suffix: &str) 
 /// UI, then runs the lv_timer_handler loop forever.
 #[embassy_executor::task]
 pub async fn render_task(
+    spawner: Spawner,
     hi_spawner: embassy_executor::SendSpawner,
     display: SendDisplay,
     mut vitals_rx: Option<VitalsReceiver>,
+    mut wifi_rx: Option<WifiReceiver>,
+    mut mqtt_rx: Option<MqttReceiver>,
+    utc_rx: Option<UtcReceiver>,
 ) -> ! {
     // 1. Init LVGL
     lv_init();
@@ -79,7 +96,10 @@ pub async fn render_task(
     let handles = layout::create_tileview();
     let mut last_theme: u8 = CURRENT_THEME.load(Ordering::Relaxed);
 
-    // 7. Render loop
+    // 7. Spawn watch face tick task
+    let _ = spawner.spawn(watch_task::watch_task(SendWrap(handles.watchface), utc_rx).unwrap());
+
+    // 8. Render loop
     loop {
         let start = embassy_time::Instant::now();
 
@@ -100,6 +120,40 @@ pub async fn render_task(
             if let Some((hr, spo2, _temp)) = rx.try_changed() {
                 set_label_u8(handles.vitals.hr_label.as_ptr(), hr, " BPM");
                 set_label_u8(handles.vitals.spo2_label.as_ptr(), spo2, " % SpO2");
+            }
+        }
+
+        // Poll wifi status
+        if let Some(ref mut rx) = wifi_rx {
+            if let Some(connected) = rx.try_changed() {
+                unsafe {
+                    if connected {
+                        lv_bevy_ecs::sys::lv_led_set_color(
+                            handles.watchface.wifi_led,
+                            lv_bevy_ecs::functions::lv_color_hex(0xa6e3a1),
+                        );
+                        lv_bevy_ecs::sys::lv_led_on(handles.watchface.wifi_led);
+                    } else {
+                        lv_bevy_ecs::sys::lv_led_off(handles.watchface.wifi_led);
+                    }
+                }
+            }
+        }
+
+        // Poll MQTT status
+        if let Some(ref mut rx) = mqtt_rx {
+            if let Some(connected) = rx.try_changed() {
+                unsafe {
+                    if connected {
+                        lv_bevy_ecs::sys::lv_led_set_color(
+                            handles.watchface.mqtt_led,
+                            lv_bevy_ecs::functions::lv_color_hex(0xa6e3a1),
+                        );
+                        lv_bevy_ecs::sys::lv_led_on(handles.watchface.mqtt_led);
+                    } else {
+                        lv_bevy_ecs::sys::lv_led_off(handles.watchface.mqtt_led);
+                    }
+                }
             }
         }
 

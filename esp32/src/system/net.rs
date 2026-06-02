@@ -35,7 +35,7 @@ pub async fn init(wifi_periph: esp_hal::peripherals::WIFI<'static>) -> NetResour
     let (stack, runner) = embassy_net::new(
         interface.station,
         Config::dhcpv4(Default::default()),
-        mk_static!(StackResources<3>, StackResources::<3>::new()),
+        mk_static!(StackResources<8>, StackResources::<8>::new()),
         seed,
     );
 
