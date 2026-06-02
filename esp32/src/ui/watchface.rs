@@ -9,7 +9,7 @@ use crate::services::rendering::task::{SCREEN_H, SCREEN_W};
 
 const CX: i32 = SCREEN_W / 2;
 const CY: i32 = SCREEN_H / 2;
-const DOT_R: i32 = 180;
+const DOT_R: i32 = 200;
 const DEG2RAD: f32 = core::f32::consts::PI / 180.0;
 
 #[derive(Clone, Copy)]
@@ -46,11 +46,11 @@ pub fn create(parent: &mut Wdg) -> Handles {
             let dx = (DOT_R as f32 * sinf(a)) as i32;
             let dy = (DOT_R as f32 * cosf(a)) as i32;
             let t = lv_obj_create(p);
-            lv_obj_set_size(t, 8, 8);
+            lv_obj_set_size(t, 10, 10);
             lv_obj_set_style_bg_color(t, accent, 0);
             lv_obj_set_style_bg_opa(t, 255, 0);
-            lv_obj_set_style_radius(t, 4, 0);
-            lv_obj_set_pos(t, CX + dx - 4, CY - dy - 4);
+            lv_obj_set_style_radius(t, 5, 0);
+            lv_obj_set_pos(t, CX + dx - 5, CY - dy - 5);
         }
         for i in 0..60 {
             if i % 5 == 0 {
@@ -60,7 +60,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
             let dx = (DOT_R as f32 * sinf(a)) as i32;
             let dy = (DOT_R as f32 * cosf(a)) as i32;
             let t = lv_obj_create(p);
-            lv_obj_set_size(t, 4, 4);
+            lv_obj_set_size(t, 5, 5);
             lv_obj_set_style_bg_color(t, overlay, 0);
             lv_obj_set_style_bg_opa(t, 255, 0);
             lv_obj_set_style_radius(t, 2, 0);
@@ -68,49 +68,49 @@ pub fn create(parent: &mut Wdg) -> Handles {
         }
 
         let hh = lv_obj_create(p);
-        lv_obj_set_size(hh, 6, 50);
+        lv_obj_set_size(hh, 8, 60);
         lv_obj_set_style_bg_color(hh, text, 0);
         lv_obj_set_style_bg_opa(hh, 255, 0);
-        lv_obj_set_style_radius(hh, 3, 0);
-        lv_obj_set_pos(hh, CX - 3, CY - 50);
-        lv_obj_set_style_transform_pivot_x(hh, 3, 0);
-        lv_obj_set_style_transform_pivot_y(hh, 50, 0);
+        lv_obj_set_style_radius(hh, 4, 0);
+        lv_obj_set_pos(hh, CX - 4, CY - 60);
+        lv_obj_set_style_transform_pivot_x(hh, 4, 0);
+        lv_obj_set_style_transform_pivot_y(hh, 60, 0);
 
         let mh = lv_obj_create(p);
-        lv_obj_set_size(mh, 4, 80);
+        lv_obj_set_size(mh, 6, 95);
         lv_obj_set_style_bg_color(mh, text, 0);
         lv_obj_set_style_bg_opa(mh, 255, 0);
-        lv_obj_set_style_radius(mh, 2, 0);
-        lv_obj_set_pos(mh, CX - 2, CY - 80);
-        lv_obj_set_style_transform_pivot_x(mh, 2, 0);
-        lv_obj_set_style_transform_pivot_y(mh, 80, 0);
+        lv_obj_set_style_radius(mh, 3, 0);
+        lv_obj_set_pos(mh, CX - 3, CY - 95);
+        lv_obj_set_style_transform_pivot_x(mh, 3, 0);
+        lv_obj_set_style_transform_pivot_y(mh, 95, 0);
 
         let sh = lv_obj_create(p);
-        lv_obj_set_size(sh, 2, 100);
+        lv_obj_set_size(sh, 3, 120);
         lv_obj_set_style_bg_color(sh, accent, 0);
         lv_obj_set_style_bg_opa(sh, 255, 0);
         lv_obj_set_style_radius(sh, 1, 0);
-        lv_obj_set_pos(sh, CX - 1, CY - 100);
+        lv_obj_set_pos(sh, CX - 1, CY - 120);
         lv_obj_set_style_transform_pivot_x(sh, 1, 0);
-        lv_obj_set_style_transform_pivot_y(sh, 100, 0);
+        lv_obj_set_style_transform_pivot_y(sh, 120, 0);
 
         let cd = lv_obj_create(p);
-        lv_obj_set_size(cd, 12, 12);
+        lv_obj_set_size(cd, 16, 16);
         lv_obj_set_style_bg_color(cd, accent, 0);
         lv_obj_set_style_bg_opa(cd, 255, 0);
-        lv_obj_set_style_radius(cd, 6, 0);
-        lv_obj_set_pos(cd, CX - 6, CY - 6);
+        lv_obj_set_style_radius(cd, 8, 0);
+        lv_obj_set_pos(cd, CX - 8, CY - 8);
 
         let dt = lv_label_create(p);
         lv_label_set_text(dt, c"00:00:00".as_ptr());
         lv_obj_set_style_text_color(dt, text, 0);
         lv_obj_set_style_text_align(dt, lv_text_align_t_LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_width(dt, 120);
-        lv_obj_set_pos(dt, CX - 60, CY + 100);
+        lv_obj_set_width(dt, 140);
+        lv_obj_set_pos(dt, CX - 70, 100);
 
         // ── WiFi indicator ─────────────────────────────────────
         let wl = lv_led_create(p);
-        lv_obj_set_pos(wl, CX - 75, CY + 140);
+        lv_obj_set_pos(wl, CX - 75, CY + 115);
         lv_obj_set_size(wl, 10, 10);
         lv_led_set_color(wl, lv_color_hex(0xa6e3a1));
         lv_led_off(wl);
@@ -128,7 +128,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
 
         // ── MQTT indicator ─────────────────────────────────────
         let ml = lv_led_create(p);
-        lv_obj_set_pos(ml, CX - 10, CY + 140);
+        lv_obj_set_pos(ml, CX - 10, CY + 115);
         lv_obj_set_size(ml, 10, 10);
         lv_led_set_color(ml, lv_color_hex(0xa6e3a1));
         lv_led_off(ml);
@@ -147,7 +147,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
         // ── Battery ────────────────────────────────────────────
         let bb = lv_bar_create(p);
         lv_obj_set_size(bb, 140, 14);
-        lv_obj_set_pos(bb, CX - 70, CY + 170);
+        lv_obj_set_pos(bb, CX - 70, CY + 140);
         lv_obj_set_style_bg_color(bb, overlay, 0);
         lv_obj_set_style_bg_opa(bb, 51, 0);
         lv_obj_set_style_radius(bb, 7, 0);

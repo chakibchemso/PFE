@@ -78,11 +78,12 @@ pub fn create_tileview() -> AppHandles {
     }
 }
 
-/// Re-apply theme across all tiles and watchface-specific widgets.
+/// Re-apply theme across all tiles and watchface/vitals-specific widgets.
 pub fn apply_theme(h: &AppHandles) {
     let pal = current_palette();
     for pane in &h.panes {
         theme::apply_to_pane(*pane, pal);
     }
     watchface::apply_theme(&h.watchface, pal);
+    vitals::apply_theme(&h.vitals, pal);
 }

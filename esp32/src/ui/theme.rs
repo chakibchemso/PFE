@@ -16,6 +16,8 @@ pub struct ThemePalette {
     pub surface_color: u32,
     pub overlay_color: u32,
     pub accent_color: u32,
+    pub healthy_color: u32,
+    pub unhealthy_color: u32,
 }
 
 pub const LATTE: ThemePalette = ThemePalette {
@@ -24,6 +26,8 @@ pub const LATTE: ThemePalette = ThemePalette {
     surface_color: 0xe6e9ef,
     overlay_color: 0x9ca0b0,
     accent_color: 0x1e66f5,
+    healthy_color: 0x40a02b,
+    unhealthy_color: 0xd20f39,
 };
 
 pub const MOCHA: ThemePalette = ThemePalette {
@@ -32,6 +36,8 @@ pub const MOCHA: ThemePalette = ThemePalette {
     surface_color: 0x313244,
     overlay_color: 0x6c7086,
     accent_color: 0x89b4fa,
+    healthy_color: 0xa6e3a1,
+    unhealthy_color: 0xf38ba8,
 };
 
 pub static CURRENT_THEME: AtomicU8 = AtomicU8::new(1);
