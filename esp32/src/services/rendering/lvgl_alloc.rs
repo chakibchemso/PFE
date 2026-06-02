@@ -1,45 +1,55 @@
-//! Custom LVGL allocator backend (`lv_malloc_core` / `lv_free_core` etc.)
-//!
-//! `lv_mem.c` provides the public API (`lv_malloc`, `lv_free`, …) and
-//! forwards the real work to `lv_malloc_core`, `lv_free_core`, … which we
-//! implement here — routing every LVGL allocation to PSRAM via
-//! `esp_alloc::HEAP`.  This avoids exhaustion of the ~512 kB internal DRAM
-//! that C `malloc` draws from.
-//!
-//! # Allocation header
-//!
-//! C `free(void*)` carries no size, but Rust's `GlobalAlloc::dealloc`
-//! requires a `Layout`.  We store a `usize` header immediately before the
-//! returned pointer:
-//!
-//! ```text
-//!  ┌──────────┬──────────────────────────────┐
-//!  │ size (4B)│         user data             │
-//!  ├──────────┤                              │
-//!  │ *header  │ *returned ptr                 │
-//!  └──────────┴──────────────────────────────┘
-//! ```
-
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::c_void;
 use core::ptr;
 
-/// Alignment for every LVGL allocation (matches `LV_ATTRIBUTE_MEM_ALIGN = 4`).
 const ALIGN: usize = 4;
 
-/// Header stored before the user pointer (just the allocation size).
-const HEADER: usize = core::mem::size_of::<usize>();
+const CANARY_VAL: usize = 0xDEAD_BEEFusize;
 
-// ---------------------------------------------------------------------------
-// lv_malloc_core
-// ---------------------------------------------------------------------------
+// Layout: [hdr_canary(4) | size(4) | user_data(size) | foot_canary(4)]
+//           block+0         block+4    block+8          block+8+size
+const HDR_CANARY: usize = 0;
+const HDR_SIZE: usize = 4;
+const OFFSET_USER: usize = 8;
+
+const OVERHEAD: usize = 12;
+
+/// Round up to nearest multiple of 4 for footer canary alignment.
+const fn aligned(n: usize) -> usize {
+    (n + 3) & !3
+}
+
+fn footer_off(size: usize) -> usize {
+    OFFSET_USER + aligned(size)
+}
+
+unsafe fn write_canaries(block: *mut u8, size: usize) {
+    unsafe {
+        ptr::write(block.add(HDR_CANARY) as *mut u32, CANARY_VAL as u32);
+        ptr::write(block.add(HDR_SIZE) as *mut usize, size);
+        ptr::write(block.add(footer_off(size)) as *mut u32, CANARY_VAL as u32);
+    }
+}
+
+fn check_canaries(block: *mut u8, size: usize) {
+    let h = unsafe { ptr::read(block.add(HDR_CANARY) as *const u32) };
+    if h != CANARY_VAL as u32 {
+        panic!("LVGL canary fail: header at {:p}", block);
+    }
+    let f = unsafe { ptr::read(block.add(footer_off(size)) as *const u32) };
+    if f != CANARY_VAL as u32 {
+        panic!("LVGL canary fail: footer at {:p}", unsafe {
+            block.add(footer_off(size))
+        });
+    }
+}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn lv_malloc_core(size: usize) -> *mut c_void {
     if size == 0 {
         return ptr::null_mut();
     }
-    let total = match size.checked_add(HEADER) {
+    let total = match size.checked_add(OVERHEAD) {
         Some(n) => n,
         None => return ptr::null_mut(),
     };
@@ -48,60 +58,58 @@ pub unsafe extern "C" fn lv_malloc_core(size: usize) -> *mut c_void {
     if block.is_null() {
         return ptr::null_mut();
     }
-    unsafe { ptr::write(block as *mut usize, size) };
-    unsafe { block.add(HEADER) as *mut c_void }
+    unsafe {
+        write_canaries(block, size);
+        block.add(OFFSET_USER) as *mut c_void
+    }
 }
-
-// ---------------------------------------------------------------------------
-// lv_free_core
-// ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn lv_free_core(ptr: *mut c_void) {
-    if ptr.is_null() {
-        return;
+    unsafe {
+        if ptr.is_null() {
+            return;
+        }
+        let block = (ptr as *mut u8).sub(OFFSET_USER);
+        let size = ptr::read(block.add(HDR_SIZE) as *const usize);
+        check_canaries(block, size);
+        let total = size + OVERHEAD;
+        let layout = Layout::from_size_align_unchecked(total, ALIGN);
+        esp_alloc::HEAP.dealloc(block, layout);
     }
-    let user = ptr as *mut u8;
-    let header = unsafe { user.sub(HEADER) };
-    let size = unsafe { ptr::read(header as *mut usize) };
-    let total = size + HEADER;
-    let layout = unsafe { Layout::from_size_align_unchecked(total, ALIGN) };
-    unsafe { esp_alloc::HEAP.dealloc(header, layout) };
 }
-
-// ---------------------------------------------------------------------------
-// lv_realloc_core
-// ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn lv_realloc_core(ptr: *mut c_void, new_size: usize) -> *mut c_void {
-    if new_size == 0 {
-        unsafe { lv_free_core(ptr) };
-        return ptr::null_mut();
+    unsafe {
+        if new_size == 0 {
+            lv_free_core(ptr);
+            return ptr::null_mut();
+        }
+        if ptr.is_null() {
+            return lv_malloc_core(new_size);
+        }
+
+        let block = (ptr as *mut u8).sub(OFFSET_USER);
+        let old_size = ptr::read(block.add(HDR_SIZE) as *const usize);
+        check_canaries(block, old_size);
+
+        let new_ptr = lv_malloc_core(new_size);
+        if new_ptr.is_null() {
+            return ptr::null_mut();
+        }
+
+        let copy = if old_size < new_size {
+            old_size
+        } else {
+            new_size
+        };
+        ptr::copy_nonoverlapping(ptr, new_ptr, copy);
+        lv_free_core(ptr);
+
+        new_ptr
     }
-    if ptr.is_null() {
-        return unsafe { lv_malloc_core(new_size) };
-    }
-
-    let user = ptr as *mut u8;
-    let header = unsafe { user.sub(HEADER) };
-    let old_size = unsafe { ptr::read(header as *mut usize) };
-
-    let new_ptr = unsafe { lv_malloc_core(new_size) };
-    if new_ptr.is_null() {
-        return ptr::null_mut();
-    }
-
-    let copy = if old_size < new_size { old_size } else { new_size };
-    unsafe { ptr::copy_nonoverlapping(ptr, new_ptr, copy) };
-    unsafe { lv_free_core(ptr) };
-
-    new_ptr
 }
-
-// ---------------------------------------------------------------------------
-// lv_mem_init / lv_mem_deinit
-// ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
 pub extern "C" fn lv_mem_init() {}
@@ -109,25 +117,13 @@ pub extern "C" fn lv_mem_init() {}
 #[unsafe(no_mangle)]
 pub extern "C" fn lv_mem_deinit() {}
 
-// ---------------------------------------------------------------------------
-// lv_mem_monitor_core  (stub)
-// ---------------------------------------------------------------------------
-
 #[unsafe(no_mangle)]
 pub extern "C" fn lv_mem_monitor_core(_mon_p: *mut c_void) {}
 
-// ---------------------------------------------------------------------------
-// lv_mem_test_core  (stub — always ok)
-// ---------------------------------------------------------------------------
-
 #[unsafe(no_mangle)]
 pub extern "C" fn lv_mem_test_core() -> i32 {
-    1 // LV_RESULT_OK
+    1
 }
-
-// ---------------------------------------------------------------------------
-// lv_mem_add_pool / lv_mem_remove_pool  (stubs — not supported)
-// ---------------------------------------------------------------------------
 
 #[unsafe(no_mangle)]
 pub extern "C" fn lv_mem_add_pool(_mem: *mut c_void, _bytes: usize) -> *mut c_void {

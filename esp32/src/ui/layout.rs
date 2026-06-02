@@ -1,114 +1,87 @@
-use core::mem;
+//! Tileview-based watch UI layout — creates 5 panes and wires theme switching.
 
-use oxivgl::enums::ScrollDir;
-use oxivgl::style::props;
-use oxivgl::widgets::{Obj, Tileview, WidgetError};
-use oxivgl_sys::{
-    _lv_style_id_t_LV_STYLE_TEXT_COLOR, lv_anim_path_ease_out, lv_color_hex,
-    lv_obj_set_style_bg_color, lv_obj_set_style_text_color, lv_obj_set_style_transition,
-    lv_style_prop_t, lv_style_transition_dsc_init, lv_style_transition_dsc_t,
-};
+use lv_bevy_ecs::sys::{lv_dir_t_LV_DIR_LEFT, lv_dir_t_LV_DIR_RIGHT, lv_obj_t};
+use lv_bevy_ecs::widgets::Tileview;
 
-use super::{ecg, gps, settings, theme, vitals, watchface};
+use super::theme::{self, current_palette};
+use super::{ecg, gps, settings, vitals, watchface};
 
-static THEME_PROPS: [lv_style_prop_t; 3] = [
-    props::BG_COLOR,
-    _lv_style_id_t_LV_STYLE_TEXT_COLOR as lv_style_prop_t,
-    0 as lv_style_prop_t,
-];
-
+/// Aggregated handles for all UI widgets that need runtime updates.
 pub struct AppHandles {
-    pub panes: [*mut oxivgl_sys::lv_obj_t; 5],
-    pub theme_switch: *mut oxivgl_sys::lv_obj_t,
-    pub bright_slider: *mut oxivgl_sys::lv_obj_t,
-    pub time_label: *mut oxivgl_sys::lv_obj_t,
-    pub date_label: *mut oxivgl_sys::lv_obj_t,
-    pub battery_label: *mut oxivgl_sys::lv_obj_t,
-    pub hr_label: *mut oxivgl_sys::lv_obj_t,
-    pub spo2_label: *mut oxivgl_sys::lv_obj_t,
+    pub panes: [*mut lv_obj_t; 5],
+    pub settings: settings::Handles,
+    pub watchface: watchface::Handles,
+    pub vitals: vitals::Handles,
 }
 
-pub fn create_tileview(
-    screen: &Obj<'static>,
-) -> Result<(AppHandles, Tileview<'static>), WidgetError> {
-    let tv = Tileview::new(screen)?;
-    let mut panes = [core::ptr::null_mut(); 5];
+/// Create the full tileview UI: 5 panes spanning a horizontal strip.
+pub fn create_tileview() -> AppHandles {
+    let mut tv = Tileview::new();
+    settings::set_tileview_handle(tv.raw_mut());
 
-    // Settings pane: no scroll direction — the tileview would otherwise
-    // intercept drag events for page navigation, preventing child widgets
-    // (like the brightness slider) from receiving indev events. Navigation
-    // from settings is handled by a "Back" button instead.
-    let p0 = tv.add_tile(0, 0, ScrollDir::NONE);
-    let sh = settings::create(&*p0, tv.handle())?;
-    panes[0] = p0.handle();
+    // Pane 0: Settings
+    let mut p0 = tv
+        .add_tile(0, 1, lv_dir_t_LV_DIR_RIGHT)
+        .expect("tileview add_tile(0,0)");
 
-    let p1 = tv.add_tile(1, 0, ScrollDir::LEFT | ScrollDir::RIGHT);
-    let wh = watchface::create(&*p1)?;
-    panes[1] = p1.handle();
+    // Pane 1: Watchface (center)
+    let mut p1 = tv
+        .add_tile(1, 1, lv_dir_t_LV_DIR_LEFT | lv_dir_t_LV_DIR_RIGHT)
+        .expect("tileview add_tile(1,0)");
 
-    let p2 = tv.add_tile(2, 0, ScrollDir::LEFT | ScrollDir::RIGHT);
-    let vh = vitals::create(&*p2)?;
-    panes[2] = p2.handle();
+    // Pane 2: Vitals
+    let mut p2 = tv
+        .add_tile(2, 1, lv_dir_t_LV_DIR_LEFT | lv_dir_t_LV_DIR_RIGHT)
+        .expect("tileview add_tile(2,0)");
 
-    let p3 = tv.add_tile(3, 0, ScrollDir::LEFT | ScrollDir::RIGHT);
-    ecg::create(&*p3)?;
-    panes[3] = p3.handle();
+    // Pane 3: ECG
+    let mut p3 = tv
+        .add_tile(3, 1, lv_dir_t_LV_DIR_LEFT | lv_dir_t_LV_DIR_RIGHT)
+        .expect("tileview add_tile(3,0)");
 
-    let p4 = tv.add_tile(4, 0, ScrollDir::LEFT);
-    gps::create(&*p4)?;
-    panes[4] = p4.handle();
+    // Pane 4: GPS
+    let mut p4 = tv
+        .add_tile(4, 1, lv_dir_t_LV_DIR_LEFT)
+        .expect("tileview add_tile(4,0)");
 
-    // Initialise a transition descriptor and set it on every pane.
-    let mut tr: lv_style_transition_dsc_t = unsafe { mem::zeroed() };
-    unsafe {
-        lv_style_transition_dsc_init(
-            &mut tr,
-            THEME_PROPS.as_ptr(),
-            Some(lv_anim_path_ease_out),
-            300,
-            0,
-            core::ptr::null_mut(),
-        );
+    let settings_h = settings::create(&mut p0);
+    let watchface_h = watchface::create(&mut p1);
+    let vitals_h = vitals::create(&mut p2);
+    ecg::create(&mut p3);
+    gps::create(&mut p4);
+
+    // Save pane raw pointers for re-theming
+    let panes = [
+        p0.raw_mut(),
+        p1.raw_mut(),
+        p2.raw_mut(),
+        p3.raw_mut(),
+        p4.raw_mut(),
+    ];
+
+    // Start on watchface
+    tv.set_tile_by_index(1, 1, false);
+
+    // Initial theme
+    let pal = current_palette();
+    for pane in &panes {
+        theme::apply_to_pane(*pane, pal);
     }
-    for &p in &panes {
-        unsafe {
-            lv_obj_set_style_transition(p, &tr, 0);
-        }
+
+    let _ = tv.leak();
+
+    AppHandles {
+        panes,
+        settings: settings_h,
+        watchface: watchface_h,
+        vitals: vitals_h,
     }
-
-    tv.set_tile_by_index(1, 0, false);
-
-    Ok((
-        AppHandles {
-            panes,
-            theme_switch: sh.theme_switch,
-            bright_slider: sh.bright_slider,
-            time_label: wh.time_label,
-            date_label: wh.date_label,
-            battery_label: wh.battery_label,
-            hr_label: vh.hr_label,
-            spo2_label: vh.spo2_label,
-        },
-        tv,
-    ))
 }
 
-pub fn apply_theme(handles: &AppHandles) {
-    let pal = theme::current_palette();
-    for &p in &handles.panes {
-        unsafe {
-            lv_obj_set_style_bg_color(p, lv_color_hex(pal.bg_color), 0);
-            lv_obj_set_style_text_color(p, lv_color_hex(pal.text_color), 0);
-        }
-    }
-    if !handles.theme_switch.is_null() {
-        unsafe {
-            lv_obj_set_style_bg_color(handles.theme_switch, lv_color_hex(pal.accent_color), 2);
-        }
-    }
-    if !handles.bright_slider.is_null() {
-        unsafe {
-            lv_obj_set_style_bg_color(handles.bright_slider, lv_color_hex(pal.accent_color), 2);
-        }
+/// Re-apply theme across all tiles.
+pub fn apply_theme(h: &AppHandles) {
+    let pal = current_palette();
+    for pane in &h.panes {
+        theme::apply_to_pane(*pane, pal);
     }
 }

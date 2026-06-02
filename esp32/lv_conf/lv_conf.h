@@ -110,7 +110,7 @@
 #define LV_USE_ASSERT_OBJ           0
 
 #define LV_ASSERT_HANDLER_INCLUDE <stdint.h>
-#define LV_ASSERT_HANDLER while(1);
+#define LV_ASSERT_HANDLER __builtin_trap();
 
 /*-------------
  * Debug

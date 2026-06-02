@@ -7,11 +7,19 @@ DEFMT_LOG = "info"
 # Tell esp-hal to compile the PSRAM driver in Octal mode
 # ESP_HAL_CONFIG_PSRAM_MODE = "octal"
 
-# Path to lv_conf.h for oxivgl-sys
+# Path to lv_conf.h for lightvgl-sys
 DEP_LV_CONFIG_PATH = { value = "./lv_conf/", relative = true }
 
 # point CC to the esp compiler
 CC_xtensa_esp32s3_none_elf = "xtensa-esp32s3-elf-gcc"
+
+# Bindgen needs explicit target for host builds (esp-clang lib defaults wrong)
+BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_linux_gnu = "--target=x86_64-unknown-linux-gnu"
+# Target-specific bindgen args for xtensa:
+#   --target            : must match the target triple for correct data layout
+#   -nostdinc -isystem  : use xtensa newlib headers (not host glibc) to avoid
+#                         __float128/__TC__ machine modes xtensa can't handle.
+BINDGEN_EXTRA_CLANG_ARGS_xtensa_esp32s3_none_elf = "--target=xtensa-esp32s3-none-elf -nostdinc -isystem /home/chakibchemso/.rustup/toolchains/esp/xtensa-esp-elf/esp-15.2.0_20250920/xtensa-esp-elf/lib/gcc/xtensa-esp-elf/15.2.0/include -isystem /home/chakibchemso/.rustup/toolchains/esp/xtensa-esp-elf/esp-15.2.0_20250920/xtensa-esp-elf/lib/gcc/xtensa-esp-elf/15.2.0/include-fixed -isystem /home/chakibchemso/.rustup/toolchains/esp/xtensa-esp-elf/esp-15.2.0_20250920/xtensa-esp-elf/xtensa-esp-elf/include"
 
 [build]
 target = "xtensa-esp32s3-none-elf"

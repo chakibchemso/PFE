@@ -37,9 +37,8 @@ rust-mqtt = { version = "0.5", default-features = false, features = [
 ] }
 # gps
 nmea = { version = "0.7", default-features = false, features = ["GNSS", "defmt-03"] }
-# ui
-oxivgl = { version = "0.1.2", features = ["esp-hal"] }
-oxivgl-sys = "0.1.2"
+# ui (LVGL bindings via bevy_ecs)
+lv_bevy_ecs = { version = "0.10", features = ["defmt", "no_ecs"] }
 
 # ! ### espressif crates ###
 # provides the bootloader and app description for flashing
@@ -146,10 +145,6 @@ embedded-test = { version = "0.7", features = [
 ] }
 
 [build-dependencies]
-
-[patch.crates-io]
-oxivgl = { path = "tmp/oxivgl" }
-oxivgl-sys = { path = "tmp/oxivgl/oxivgl-sys" }
 
 [profile.dev]
 opt-level = "s"

@@ -1,87 +1,27 @@
+//! LVGL render task — initialises LVGL, creates the UI, and runs the
+//! `lv_timer_handler()` loop with vitals polling and theme updates.
+
 use core::sync::atomic::Ordering;
 
+use defmt::trace;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::Receiver;
-use oxivgl::display::LvglBuffers;
-use oxivgl::view::{NavAction, View};
-use oxivgl::widgets::{Obj, WidgetError};
+use embassy_time::{Duration, Timer};
+use lv_bevy_ecs::functions::{NextTimerPeriod, lv_init, lv_tick_set_cb, lv_timer_handler};
 
-use super::super::rendering::task::{LVGL_BUF_BYTES, SCREEN_H, SCREEN_W};
+use crate::services::rendering::display::SendDisplay;
+use crate::services::rendering::task::{DISPLAY_READY, flush_task, init_lvgl_display};
 use crate::services::touch;
-use crate::ui::layout::{AppHandles, apply_theme, create_tileview};
+use crate::ui::layout::{self, apply_theme};
 use crate::ui::theme::CURRENT_THEME;
 
 /// Receiver for vitals data (heart rate, SpO2, temperature) from the sensing
-/// pipeline. Polled in [`WatchView::update`] each render tick.
+/// pipeline. Polled each render tick.
 type VitalsReceiver = Receiver<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>;
 
-pub struct WatchView {
-    tileview: Option<oxivgl::widgets::Tileview<'static>>,
-    handles: Option<AppHandles>,
-    indev_registered: bool,
-    last_theme: u8,
-    vitals_rx: Option<VitalsReceiver>,
-}
-
-impl WatchView {
-    pub fn new(vitals_rx: Option<VitalsReceiver>) -> Self {
-        Self {
-            tileview: None,
-            handles: None,
-            indev_registered: false,
-            last_theme: 1,
-            vitals_rx,
-        }
-    }
-}
-
-impl Default for WatchView {
-    fn default() -> Self {
-        Self::new(None)
-    }
-}
-
-impl View for WatchView {
-    fn create(&mut self, container: &Obj<'static>) -> Result<(), WidgetError> {
-        if !self.indev_registered {
-            touch::register_indev();
-            self.indev_registered = true;
-        }
-
-        let (handles, tileview) = create_tileview(container)?;
-        self.tileview = Some(tileview);
-        apply_theme(&handles);
-        self.handles = Some(handles);
-        self.last_theme = CURRENT_THEME.load(Ordering::Relaxed);
-
-        Ok(())
-    }
-
-    fn update(&mut self) -> Result<NavAction, WidgetError> {
-        let current = CURRENT_THEME.load(Ordering::Relaxed);
-        if current != self.last_theme {
-            if let Some(ref handles) = self.handles {
-                apply_theme(handles);
-            }
-            self.last_theme = current;
-        }
-
-        if let Some(ref mut rx) = self.vitals_rx {
-            if let Some((hr, spo2, _temp)) = rx.try_changed() {
-                if let Some(ref handles) = self.handles {
-                    set_label_u8(handles.hr_label, hr, " BPM");
-                    set_label_u8(handles.spo2_label, spo2, " % SpO2");
-                }
-            }
-        }
-
-        Ok(NavAction::None)
-    }
-}
-
 /// Set an LVGL label to a formatted value, e.g. `set_label(handle, 72, " BPM")`
-/// produces `"72 BPM"`.
-fn set_label_u8(handle: *mut oxivgl_sys::lv_obj_t, val: u8, suffix: &str) {
+/// produces `"72 BPM"`. Uses `lv_label_set_text` directly with a stack buffer.
+fn set_label_u8(handle: *mut lv_bevy_ecs::sys::lv_obj_t, val: u8, suffix: &str) {
     let mut buf = [0u8; 32];
     let suffix_bytes = suffix.as_bytes();
     let mut i = 0;
@@ -103,20 +43,80 @@ fn set_label_u8(handle: *mut oxivgl_sys::lv_obj_t, val: u8, suffix: &str) {
     buf[i] = 0;
 
     unsafe {
-        oxivgl_sys::lv_label_set_text(handle, buf.as_ptr() as *const core::ffi::c_char);
-        // Explicit invalidation — lv_label_set_text should already call
-        // lv_obj_invalidate internally, but on embedded targets with FULL
-        // render mode we've seen cases where the invalidation doesn't
-        // propagate correctly without an explicit call.
-        oxivgl_sys::lv_obj_invalidate(handle);
+        lv_bevy_ecs::sys::lv_label_set_text(handle, buf.as_ptr() as *const core::ffi::c_char);
+        lv_bevy_ecs::sys::lv_obj_invalidate(handle);
     }
 }
 
+/// Core 1 render task: initializes LVGL + display + touch, creates the tileview
+/// UI, then runs the lv_timer_handler loop forever.
 #[embassy_executor::task]
 pub async fn render_task(
-    bufs: &'static mut LvglBuffers<LVGL_BUF_BYTES>,
-    vitals_rx: Option<VitalsReceiver>,
+    hi_spawner: embassy_executor::SendSpawner,
+    display: SendDisplay,
+    mut vitals_rx: Option<VitalsReceiver>,
 ) -> ! {
-    let view = WatchView::new(vitals_rx);
-    oxivgl::view::run_app::<WatchView, LVGL_BUF_BYTES>(SCREEN_W, SCREEN_H, bufs, view).await
+    // 1. Init LVGL
+    lv_init();
+    lv_bevy_ecs::logging::connect();
+    lv_tick_set_cb(|| embassy_time::Instant::now().as_millis() as u32);
+
+    // 2. Init display and wire flush callbacks
+    // SAFETY: lv_init() called above, called once.
+    let _disp = unsafe { init_lvgl_display() };
+
+    // 3. Spawn flush task on interrupt executor
+    hi_spawner.spawn(flush_task(display).unwrap());
+
+    // 4. Wait for display ready
+    DISPLAY_READY.wait().await;
+
+    // 5. Register touch indev
+    let _touch = touch::register_indev();
+    core::mem::forget(_touch); // lives forever
+
+    // 6. Create UI
+    let handles = layout::create_tileview();
+    let mut last_theme: u8 = CURRENT_THEME.load(Ordering::Relaxed);
+
+    // 7. Render loop
+    loop {
+        let start = embassy_time::Instant::now();
+
+        trace!("R: before lv_timer_handler");
+        // Drive LVGL timers (refresh, animations, indev reads)
+        let period = lv_timer_handler();
+        trace!("R: after lv_timer_handler");
+
+        // Check theme toggle
+        let current = CURRENT_THEME.load(Ordering::Relaxed);
+        if current != last_theme {
+            apply_theme(&handles);
+            last_theme = current;
+        }
+
+        // Poll vitals
+        if let Some(ref mut rx) = vitals_rx {
+            if let Some((hr, spo2, _temp)) = rx.try_changed() {
+                set_label_u8(handles.vitals.hr_label.as_ptr(), hr, " BPM");
+                set_label_u8(handles.vitals.spo2_label.as_ptr(), spo2, " % SpO2");
+            }
+        }
+
+        // Sleep until next timer period
+        match period {
+            NextTimerPeriod::Ready => {
+                // At least one timer is ready — don't sleep, just yield
+                Timer::after(Duration::from_millis(5)).await;
+            }
+            NextTimerPeriod::AfterMs(ms) => {
+                let elapsed = start.elapsed().as_millis() as u32;
+                let sleep_ms = ms.get().saturating_sub(elapsed).max(1);
+                Timer::after(Duration::from_millis(sleep_ms.into())).await;
+            }
+            NextTimerPeriod::Never => {
+                Timer::after(Duration::from_secs(1)).await;
+            }
+        }
+    }
 }

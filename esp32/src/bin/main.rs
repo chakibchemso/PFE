@@ -59,25 +59,19 @@ async fn core1_bootstrap(
 
     let display =
         services::rendering::init_display(qspi_spi.0, qspi_rx.0, qspi_tx.0, cs.0, rst.0).await;
-    let oxivgl_display = services::rendering::OxivglDisplay(display);
+    let send_display = services::rendering::SendDisplay(display);
 
-    // 1. Spawn flush task on high-priority interrupt executor.
-    //    The flush task wraps the display in a `BrightnessDisplay` that handles
-    //    brightness updates between LVGL frame stripes.
-    services::rendering::register_flush(&hi_spawner, oxivgl_display);
-
-    // 2. Allocate LVGL double-buffers (DMA-aligned, 'static lifetime).
-    let bufs = services::rendering::task::take_lvgl_buffers();
-
-    // 3. Get a vitals receiver for the UI and spawn the render task.
+    // Get a vitals receiver for the UI.
     let vitals_rx = bus.vitals.receiver();
-    spawner.spawn(services::ui::task::render_task(bufs, vitals_rx).unwrap());
 
-    // 4. Spawn touch task on thread-mode executor.
-    spawner.spawn(
-        services::touch::task::touch_task(touch_i2c.0, touch_rst.0, render_config)
-            .unwrap(),
-    );
+    // Spawn the render task — it initialises LVGL, registers the flush
+    // pipeline + touch indev, creates the UI, and runs the main loop.
+    spawner.spawn(services::ui::task::render_task(hi_spawner, send_display, vitals_rx).unwrap());
+
+    // Spawn touch polling task on thread-mode executor (feeds atomics
+    // that the LVGL indev reads inside lv_timer_handler).
+    spawner
+        .spawn(services::touch::task::touch_task(touch_i2c.0, touch_rst.0, render_config).unwrap());
 
     info!("Core 1: LVGL + flush + touch running");
 

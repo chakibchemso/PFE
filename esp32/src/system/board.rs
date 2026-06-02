@@ -166,7 +166,9 @@ pub fn init_board(
         i2c0,
         I2cConfig::default()
             .with_frequency(Rate::from_khz(I2C_FREQ_KHZ))
-            .with_timeout(BusTimeout::Maximum),
+            // Fail fast on a held-low SCL/SDA instead of letting one sensor
+            // transaction wedge the shared async I2C bus indefinitely.
+            .with_timeout(BusTimeout::BusCycles(8_000)),
     )
     .expect("Failed to initialize I2C")
     .with_scl(gpio14)

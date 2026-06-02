@@ -1,4 +1,4 @@
-use defmt::trace;
+use defmt::{info, trace};
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::watch::Sender;
@@ -105,8 +105,9 @@ impl OxymeterRunner {
                         }
                     }
                 }
-                Err(_) => {
-                    // Handle I2C read errors
+                Err(e) => {
+                    info!("oxymeter I2C read error: {}", defmt::Debug2Format(&e));
+                    Timer::after(Duration::from_millis(10)).await;
                 }
             }
 
@@ -119,8 +120,9 @@ impl OxymeterRunner {
                 elapsed - read_time
             );
 
-            // Yield to give other I2C tasks (touch) a chance
-            // Timer::after(Duration::from_millis(2)).await;
+            // Yield to give lower-rate I2C clients (touch) a chance to
+            // acquire the shared bus before this high-rate loop polls again.
+            Timer::after(Duration::from_millis(2)).await;
         }
     }
 
