@@ -14,10 +14,8 @@ use embassy_executor::Spawner;
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{DISPLAY_READY, flush_task, init_lvgl_display};
 use crate::services::touch;
-use crate::services::ui::watch_task;
 use crate::ui::layout::{self, apply_theme};
 use crate::ui::theme::CURRENT_THEME;
-use crate::utils::SendWrap;
 
 /// Receiver for vitals data (heart rate, SpO2, temperature) from the sensing
 /// pipeline. Polled each render tick.
@@ -65,7 +63,7 @@ fn set_label_u8(handle: *mut lv_bevy_ecs::sys::lv_obj_t, val: u8, suffix: &str) 
 /// UI, then runs the lv_timer_handler loop forever.
 #[embassy_executor::task]
 pub async fn render_task(
-    spawner: Spawner,
+    _spawner: Spawner,
     hi_spawner: embassy_executor::SendSpawner,
     display: SendDisplay,
     mut vitals_rx: Option<VitalsReceiver>,
@@ -101,12 +99,67 @@ pub async fn render_task(
     let mut bpm_idx = 0usize;
     let mut bpm_count = 0usize;
 
-    // 7. Spawn watch face tick task
-    let _ = spawner.spawn(watch_task::watch_task(SendWrap(handles.watchface), utc_rx).unwrap());
+    // Watch tick state (inline, no separate task to avoid async invalidation)
+    let mut last_tick = embassy_time::Instant::now();
+    let mut utc_rx = utc_rx;
+    let mut epoch_secs = 0u64;
 
     // 8. Render loop
     loop {
         let start = embassy_time::Instant::now();
+
+        // ── Watch face tick (before timer handler so invalidation is batched) ──
+        let now = embassy_time::Instant::now();
+        if now - last_tick >= embassy_time::Duration::from_millis(980) {
+            last_tick = now;
+
+            if let Some(ref mut rx) = utc_rx {
+                if let Some(new_epoch) = rx.try_changed() {
+                    epoch_secs = new_epoch;
+                } else {
+                    epoch_secs = epoch_secs.wrapping_add(1);
+                }
+            } else {
+                epoch_secs = epoch_secs.wrapping_add(1);
+            }
+
+            // Apply GMT+1 offset
+            let local = ((epoch_secs as i64) + 3600).rem_euclid(86400) as u64;
+            let hours = local / 3600;
+            let mins = (local / 60) % 60;
+            let secs = local % 60;
+
+            let h_rot = ((hours % 12) * 300 + mins * 5) as i32;
+            let m_rot = (mins * 60 + secs) as i32;
+            let s_rot = (secs * 60) as i32;
+
+            let mut buf = [0u8; 9];
+            buf[0] = b'0' + (hours / 10) as u8;
+            buf[1] = b'0' + (hours % 10) as u8;
+            buf[2] = b':';
+            buf[3] = b'0' + (mins / 10) as u8;
+            buf[4] = b'0' + (mins % 10) as u8;
+            buf[5] = b':';
+            buf[6] = b'0' + (secs / 10) as u8;
+            buf[7] = b'0' + (secs % 10) as u8;
+            buf[8] = 0;
+
+            unsafe {
+                lv_bevy_ecs::sys::lv_obj_set_style_transform_rotation(
+                    handles.watchface.hour_hand, h_rot, 0,
+                );
+                lv_bevy_ecs::sys::lv_obj_set_style_transform_rotation(
+                    handles.watchface.minute_hand, m_rot, 0,
+                );
+                lv_bevy_ecs::sys::lv_obj_set_style_transform_rotation(
+                    handles.watchface.second_hand, s_rot, 0,
+                );
+                lv_bevy_ecs::sys::lv_label_set_text(
+                    handles.watchface.digital_time,
+                    buf.as_ptr() as *const core::ffi::c_char,
+                );
+            }
+        }
 
         trace!("R: before lv_timer_handler");
         // Drive LVGL timers (refresh, animations, indev reads)
