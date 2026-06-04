@@ -135,6 +135,16 @@ libm = "0.2.16"
 nb = "1.1.0"
 max3010x-async = { version = "0.1.0", path = "../crates/max3010x-async" }
 
+# ! ### storage crates ###
+esp-storage = { version = "0.9", features = ["esp32s3"] }
+sequential-storage = "7.2"
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+postcard = { version = "1", default-features = false, features = ["alloc"] }
+embedded-storage = "0.3"
+embedded-storage-async = "0.4"
+
+[profile.dev.package.esp-storage]
+opt-level = 3
 
 [dev-dependencies]
 embedded-test = { version = "0.7", features = [

@@ -4,12 +4,11 @@ use lv_bevy_ecs::sys::{lv_dir_t_LV_DIR_LEFT, lv_dir_t_LV_DIR_RIGHT, lv_obj_t};
 use lv_bevy_ecs::widgets::Tileview;
 
 use super::theme::{self, current_palette};
-use super::{ecg, gps, settings, vitals, watchface};
+use super::{display_settings, ecg, gmt, gps, keyboard, settings, vitals, watchface};
 
 /// Aggregated handles for all UI widgets that need runtime updates.
 pub struct AppHandles {
     pub panes: [*mut lv_obj_t; 5],
-    pub settings: settings::Handles,
     pub watchface: watchface::Handles,
     pub vitals: vitals::Handles,
 }
@@ -17,7 +16,8 @@ pub struct AppHandles {
 /// Create the full tileview UI: 5 panes spanning a horizontal strip.
 pub fn create_tileview() -> AppHandles {
     let mut tv = Tileview::new();
-    settings::set_tileview_handle(tv.raw_mut());
+    let tv_raw = tv.raw_mut();
+    keyboard::set_tileview_handle(tv_raw);
 
     // Pane 0: Settings
     let mut p0 = tv
@@ -44,7 +44,7 @@ pub fn create_tileview() -> AppHandles {
         .add_tile(4, 1, lv_dir_t_LV_DIR_LEFT)
         .expect("tileview add_tile(4,0)");
 
-    let settings_h = settings::create(&mut p0);
+    settings::create(&mut p0);
     let watchface_h = watchface::create(&mut p1);
     let vitals_h = vitals::create(&mut p2);
     ecg::create(&mut p3);
@@ -72,13 +72,12 @@ pub fn create_tileview() -> AppHandles {
 
     AppHandles {
         panes,
-        settings: settings_h,
         watchface: watchface_h,
         vitals: vitals_h,
     }
 }
 
-/// Re-apply theme across all tiles and watchface/vitals-specific widgets.
+/// Re-apply theme across all tiles, per-tile widgets, and open modals.
 pub fn apply_theme(h: &AppHandles) {
     let pal = current_palette();
     for pane in &h.panes {
@@ -86,4 +85,7 @@ pub fn apply_theme(h: &AppHandles) {
     }
     watchface::apply_theme(&h.watchface, pal);
     vitals::apply_theme(&h.vitals, pal);
+    keyboard::re_theme();
+    gmt::re_theme();
+    display_settings::re_theme();
 }

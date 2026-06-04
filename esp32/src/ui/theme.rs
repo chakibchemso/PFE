@@ -3,10 +3,11 @@ use core::sync::atomic::{AtomicU8, Ordering};
 
 use lv_bevy_ecs::functions::lv_color_hex;
 use lv_bevy_ecs::sys::{
-    lv_button_class, lv_label_class, lv_obj_check_type, lv_obj_get_child, lv_obj_get_child_count,
-    lv_obj_set_style_bg_color, lv_obj_set_style_bg_opa, lv_obj_set_style_border_color,
-    lv_obj_set_style_radius, lv_obj_set_style_text_color, lv_obj_t, lv_part_t_LV_PART_INDICATOR,
-    lv_part_t_LV_PART_KNOB, lv_slider_class, lv_switch_class, lv_tileview_tile_class,
+    LV_RADIUS_CIRCLE, lv_button_class, lv_label_class, lv_obj_check_type, lv_obj_get_child,
+    lv_obj_get_child_count, lv_obj_set_style_bg_color, lv_obj_set_style_bg_opa,
+    lv_obj_set_style_border_color, lv_obj_set_style_radius, lv_obj_set_style_text_color, lv_obj_t,
+    lv_part_t_LV_PART_INDICATOR, lv_part_t_LV_PART_KNOB, lv_slider_class,
+    lv_state_t_LV_STATE_CHECKED, lv_switch_class, lv_tileview_tile_class,
 };
 
 #[derive(Clone, Copy)]
@@ -41,6 +42,7 @@ pub const MOCHA: ThemePalette = ThemePalette {
 };
 
 pub static CURRENT_THEME: AtomicU8 = AtomicU8::new(1);
+pub static CURRENT_BRIGHTNESS: AtomicU8 = AtomicU8::new(80);
 
 pub fn current_palette() -> &'static ThemePalette {
     match CURRENT_THEME.load(Ordering::Relaxed) {
@@ -85,17 +87,24 @@ fn apply_to_widget(obj: *mut lv_obj_t, pal: &ThemePalette) {
             lv_obj_set_style_bg_color(obj, accent, 0);
             lv_obj_set_style_text_color(obj, text, 0);
             lv_obj_set_style_border_color(obj, overlay, 0);
-            lv_obj_set_style_radius(obj, 8, 0);
+            lv_obj_set_style_radius(obj, LV_RADIUS_CIRCLE as i32, 0);
         } else if lv_obj_check_type(obj, addr_of!(lv_slider_class)) {
             lv_obj_set_style_bg_color(obj, surface, 0);
             lv_obj_set_style_bg_color(obj, accent, lv_part_t_LV_PART_INDICATOR);
             lv_obj_set_style_bg_color(obj, accent, lv_part_t_LV_PART_KNOB);
-            lv_obj_set_style_radius(obj, 4, 0);
         } else if lv_obj_check_type(obj, addr_of!(lv_switch_class)) {
             lv_obj_set_style_bg_color(obj, surface, 0);
-            lv_obj_set_style_bg_color(obj, accent, lv_part_t_LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(
+                obj,
+                accent,
+                lv_part_t_LV_PART_INDICATOR | lv_state_t_LV_STATE_CHECKED,
+            );
+            lv_obj_set_style_bg_opa(
+                obj,
+                255,
+                lv_part_t_LV_PART_INDICATOR | lv_state_t_LV_STATE_CHECKED,
+            );
             lv_obj_set_style_bg_color(obj, text, lv_part_t_LV_PART_KNOB);
-            lv_obj_set_style_radius(obj, 12, 0);
         } else if lv_obj_check_type(obj, addr_of!(lv_label_class)) {
             // Labels inherit text_color from their parent automatically
         }

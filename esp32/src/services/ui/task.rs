@@ -1,20 +1,39 @@
 //! LVGL render task — initialises LVGL, creates the UI, and runs the
 //! `lv_timer_handler()` loop with vitals polling and theme updates.
 
+use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 
 use defmt::trace;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
+use embassy_sync::mutex::Mutex;
 use embassy_sync::watch::Receiver;
 use embassy_time::{Duration, Timer};
 use lv_bevy_ecs::functions::{NextTimerPeriod, lv_init, lv_tick_set_cb, lv_timer_handler};
 
 use embassy_executor::Spawner;
 
+/// Channel for settings saves from UI callbacks (non-async → async bridge).
+/// Keyboard/GMT overlays send pending saves here; the render loop processes them.
+#[derive(Clone)]
+pub struct PendingSave {
+    pub key: &'static str,
+    pub data: Vec<u8>,
+}
+
+pub static PENDING_SAVES: Channel<CriticalSectionRawMutex, PendingSave, 8> = Channel::new();
+
 use crate::services::rendering::display::SendDisplay;
-use crate::services::rendering::task::{DISPLAY_READY, flush_task, init_lvgl_display};
+use crate::services::rendering::task::{
+    BRIGHTNESS_CHANNEL, DISPLAY_READY, flush_task, init_lvgl_display,
+};
+use crate::services::storage::StorageService;
+use crate::services::storage::StoredConfig;
 use crate::services::touch;
+use crate::ui::gmt::LAST_GMT_OFFSET;
 use crate::ui::layout::{self, apply_theme};
+use crate::ui::theme::CURRENT_BRIGHTNESS;
 use crate::ui::theme::CURRENT_THEME;
 
 /// Receiver for vitals data (heart rate, SpO2, temperature) from the sensing
@@ -70,6 +89,8 @@ pub async fn render_task(
     mut wifi_rx: Option<WifiReceiver>,
     mut mqtt_rx: Option<MqttReceiver>,
     utc_rx: Option<UtcReceiver>,
+    storage: &'static StorageService,
+    stored_config: &'static Mutex<CriticalSectionRawMutex, StoredConfig>,
 ) -> ! {
     // 1. Init LVGL
     lv_init();
@@ -90,7 +111,17 @@ pub async fn render_task(
     let _touch = touch::register_indev();
     core::mem::forget(_touch); // lives forever
 
-    // 6. Create UI
+    // 6. Seed runtime state from stored config
+    {
+        let cfg = stored_config.lock().await;
+        LAST_GMT_OFFSET.store(cfg.gmt_offset, Ordering::Relaxed);
+        CURRENT_THEME.store(cfg.theme, Ordering::Relaxed);
+        CURRENT_BRIGHTNESS.store(cfg.brightness, Ordering::Relaxed);
+        let hw = ((cfg.brightness as u16 * 255 + 50) / 100).min(255) as u8;
+        let _ = BRIGHTNESS_CHANNEL.try_send(hw);
+    }
+
+    // 7. Create UI
     let handles = layout::create_tileview();
     let mut last_theme: u8 = CURRENT_THEME.load(Ordering::Relaxed);
 
@@ -123,8 +154,12 @@ pub async fn render_task(
                 epoch_secs = epoch_secs.wrapping_add(1);
             }
 
-            // Apply GMT+1 offset
-            let local = ((epoch_secs as i64) + 3600).rem_euclid(86400) as u64;
+            // Apply GMT offset from stored config
+            let gmt_offset = {
+                let cfg = stored_config.lock().await;
+                cfg.gmt_offset as i64
+            };
+            let local = ((epoch_secs as i64) + gmt_offset * 3600).rem_euclid(86400) as u64;
             let hours = local / 3600;
             let mins = (local / 60) % 60;
             let secs = local % 60;
@@ -146,13 +181,19 @@ pub async fn render_task(
 
             unsafe {
                 lv_bevy_ecs::sys::lv_obj_set_style_transform_rotation(
-                    handles.watchface.hour_hand, h_rot, 0,
+                    handles.watchface.hour_hand,
+                    h_rot,
+                    0,
                 );
                 lv_bevy_ecs::sys::lv_obj_set_style_transform_rotation(
-                    handles.watchface.minute_hand, m_rot, 0,
+                    handles.watchface.minute_hand,
+                    m_rot,
+                    0,
                 );
                 lv_bevy_ecs::sys::lv_obj_set_style_transform_rotation(
-                    handles.watchface.second_hand, s_rot, 0,
+                    handles.watchface.second_hand,
+                    s_rot,
+                    0,
                 );
                 lv_bevy_ecs::sys::lv_label_set_text(
                     handles.watchface.digital_time,
@@ -173,6 +214,47 @@ pub async fn render_task(
             last_theme = current;
         }
 
+        // Process pending settings saves (from keyboard/GMT overlays)
+        while let Ok(save) = PENDING_SAVES.try_receive() {
+            storage.write(save.key, &save.data).await;
+            let mut cfg = stored_config.lock().await;
+            match save.key {
+                crate::services::storage::KEY_WIFI_SSID => {
+                    cfg.wifi_ssid = save.data;
+                }
+                crate::services::storage::KEY_WIFI_PASSWD => {
+                    cfg.wifi_passwd = save.data;
+                }
+                crate::services::storage::KEY_ASCON => {
+                    if save.data.len() == 16 {
+                        cfg.ascon_key.copy_from_slice(&save.data);
+                    }
+                }
+                crate::services::storage::KEY_GMT_OFFSET => {
+                    if let Some(&b) = save.data.first() {
+                        let off = b as i8;
+                        cfg.gmt_offset = off;
+                        LAST_GMT_OFFSET.store(off, Ordering::Relaxed);
+                    }
+                }
+                crate::services::storage::KEY_THEME => {
+                    if let Some(&t) = save.data.first() {
+                        cfg.theme = t;
+                        CURRENT_THEME.store(t, Ordering::Relaxed);
+                    }
+                }
+                crate::services::storage::KEY_BRIGHTNESS => {
+                    if let Some(&b) = save.data.first() {
+                        cfg.brightness = b;
+                        CURRENT_BRIGHTNESS.store(b, Ordering::Relaxed);
+                        let hw = ((b as u16 * 255 + 50) / 100).min(255) as u8;
+                        let _ = BRIGHTNESS_CHANNEL.try_send(hw);
+                    }
+                }
+                _ => {}
+            }
+        }
+
         // Poll vitals
         if let Some(ref mut rx) = vitals_rx {
             if let Some((hr, spo2, temp)) = rx.try_changed() {
@@ -186,14 +268,30 @@ pub async fn render_task(
                 unsafe {
                     // BPM label + range bar + slider
                     set_label_u8(handles.vitals.bpm_label, hr, " BPM");
-                    lv_bevy_ecs::sys::lv_bar_set_start_value(handles.vitals.bpm_range_bar, min as i32, false);
-                    lv_bevy_ecs::sys::lv_bar_set_value(handles.vitals.bpm_range_bar, max as i32, false);
-                    lv_bevy_ecs::sys::lv_slider_set_value(handles.vitals.bpm_slider, hr as i32, false);
+                    lv_bevy_ecs::sys::lv_bar_set_start_value(
+                        handles.vitals.bpm_range_bar,
+                        min as i32,
+                        false,
+                    );
+                    lv_bevy_ecs::sys::lv_bar_set_value(
+                        handles.vitals.bpm_range_bar,
+                        max as i32,
+                        false,
+                    );
+                    lv_bevy_ecs::sys::lv_slider_set_value(
+                        handles.vitals.bpm_slider,
+                        hr as i32,
+                        false,
+                    );
 
                     // SpO₂ label + bar with color threshold
-                    set_label_u8(handles.vitals.spo2_label, spo2, "% SpO₂");
+                    set_label_u8(handles.vitals.spo2_label, spo2, "% SpO2");
                     let pal = crate::ui::theme::current_palette();
-                    let spo2_color = if spo2 < 80 { pal.unhealthy_color } else { pal.healthy_color };
+                    let spo2_color = if spo2 < 80 {
+                        pal.unhealthy_color
+                    } else {
+                        pal.healthy_color
+                    };
                     lv_bevy_ecs::sys::lv_obj_set_style_bg_color(
                         handles.vitals.spo2_bar,
                         lv_bevy_ecs::functions::lv_color_hex(spo2_color),

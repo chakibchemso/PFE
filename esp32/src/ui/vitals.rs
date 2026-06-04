@@ -27,7 +27,7 @@ pub fn create(parent: &mut lv_bevy_ecs::widgets::Wdg) -> Handles {
     unsafe {
         // ── BPM ─────────────────────────────────────────────
         let bl = lv_label_create(p);
-        lv_label_set_text(bl, c"72 BPM".as_ptr());
+        lv_label_set_text(bl, c"-- BPM".as_ptr());
         lv_obj_set_style_text_color(bl, text, 0);
         lv_obj_set_style_text_align(bl, lv_text_align_t_LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_width(bl, 200);
@@ -62,7 +62,7 @@ pub fn create(parent: &mut lv_bevy_ecs::widgets::Wdg) -> Handles {
 
         // ── SpO₂ ────────────────────────────────────────────
         let s2l = lv_label_create(p);
-        lv_label_set_text(s2l, c"SpO₂ 0%".as_ptr());
+        lv_label_set_text(s2l, c"SpO2 --%".as_ptr());
         lv_obj_set_style_text_color(s2l, text, 0);
         lv_obj_set_style_text_align(s2l, lv_text_align_t_LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_width(s2l, 200);
@@ -75,7 +75,11 @@ pub fn create(parent: &mut lv_bevy_ecs::widgets::Wdg) -> Handles {
         lv_obj_set_style_bg_color(sb, overlay, 0);
         lv_obj_set_style_bg_opa(sb, 51, 0);
         lv_obj_set_style_radius(sb, BAR_H / 2, 0);
-        lv_obj_set_style_bg_color(sb, lv_color_hex(pal.healthy_color), lv_part_t_LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(
+            sb,
+            lv_color_hex(pal.healthy_color),
+            lv_part_t_LV_PART_INDICATOR,
+        );
         lv_obj_set_style_radius(sb, BAR_H / 2, lv_part_t_LV_PART_INDICATOR);
         lv_bar_set_value(sb, 0, false);
 
@@ -111,7 +115,11 @@ pub fn apply_theme(h: &Handles, pal: &ThemePalette) {
         lv_obj_set_style_bg_color(h.bpm_slider, accent, lv_part_t_LV_PART_KNOB);
         lv_obj_set_style_text_color(h.spo2_label, text, 0);
         lv_obj_set_style_bg_color(h.spo2_bar, overlay, 0);
-        lv_obj_set_style_bg_color(h.spo2_bar, lv_color_hex(pal.healthy_color), lv_part_t_LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(
+            h.spo2_bar,
+            lv_color_hex(pal.healthy_color),
+            lv_part_t_LV_PART_INDICATOR,
+        );
         lv_obj_set_style_text_color(h.temp_label, text, 0);
     }
 }

@@ -3,6 +3,8 @@
 
 use defmt::{info, trace};
 use embassy_executor::Spawner;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 use esp_hal::{
     Async,
     dma::{DmaRxBuf, DmaTxBuf},
@@ -15,9 +17,10 @@ use esp_hal::{
 use esp_rtos::{embassy::Executor, start_second_core};
 use esp32::{
     app::bus::SystemBus,
-    config, crypto,
+    crypto,
     drivers::bus::{I2cBus, I2cPeripheral},
     mk_static,
+    services::storage::StoredConfig,
     services::{self, storage::StorageService},
     system::{self, board::init_board, init_system},
     ui, utils,
@@ -30,7 +33,7 @@ getrandom::register_custom_getrandom!(utils::custom_getrandom);
 
 // ── Core 1 statics ────────────────────────────────────────────────────────
 
-/// Stack for core 1's scheduler + embassy executor + Slint rendering pipeline.
+/// Stack for core 1's scheduler + embassy executor.
 static CORE1_STACK: StaticCell<Stack<65536>> = StaticCell::new();
 
 /// Thread-mode executor for core 1 (LVGL render loop + touch).
@@ -38,9 +41,6 @@ static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 // ── Core 1 bootstrap ──────────────────────────────────────────────────────
 
-/// One-shot init for core 1: display, LVGL flush pipeline, touch + rendering.
-///
-/// Runs once at startup, spawns the persistent flush, render, and touch tasks.
 #[embassy_executor::task]
 async fn core1_bootstrap(
     spawner: Spawner,
@@ -54,6 +54,8 @@ async fn core1_bootstrap(
     touch_i2c: SendWrap<I2cPeripheral>,
     render_config: ui::RenderConfig,
     bus: &'static SystemBus,
+    storage: &'static StorageService,
+    stored_config: &'static Mutex<CriticalSectionRawMutex, StoredConfig>,
 ) {
     trace!("Core 1: initialising display…");
 
@@ -61,24 +63,31 @@ async fn core1_bootstrap(
         services::rendering::init_display(qspi_spi.0, qspi_rx.0, qspi_tx.0, cs.0, rst.0).await;
     let send_display = services::rendering::SendDisplay(display);
 
-    // Get receivers for the UI.
     let vitals_rx = bus.vitals.receiver();
     let wifi_rx = bus.wifi_status.receiver();
     let mqtt_rx = bus.mqtt_status.receiver();
     let utc_rx = bus.utc_epoch.receiver();
 
-    // Spawn the render task — it initialises LVGL, registers the flush
-    // pipeline + touch indev, creates the UI, and runs the main loop.
-    spawner.spawn(services::ui::task::render_task(spawner, hi_spawner, send_display, vitals_rx, wifi_rx, mqtt_rx, utc_rx).unwrap());
+    spawner.spawn(
+        services::ui::task::render_task(
+            spawner,
+            hi_spawner,
+            send_display,
+            vitals_rx,
+            wifi_rx,
+            mqtt_rx,
+            utc_rx,
+            storage,
+            stored_config,
+        )
+        .unwrap(),
+    );
 
-    // Spawn touch polling task on thread-mode executor (feeds atomics
-    // that the LVGL indev reads inside lv_timer_handler).
     spawner
         .spawn(services::touch::task::touch_task(touch_i2c.0, touch_rst.0, render_config).unwrap());
 
     info!("Core 1: LVGL + flush + touch running");
 
-    // Keep the executor alive
     loop {
         embassy_time::Timer::after_secs(60).await;
     }
@@ -88,26 +97,16 @@ async fn core1_bootstrap(
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
-    // Initialize system (clocks, heap)
     let p = init_system();
+    let flash = p.FLASH;
 
-    // Create the System Bus — central IPC manifest for all services
     let bus: &'static SystemBus = mk_static!(SystemBus, SystemBus::new());
 
-    // Initialize board peripherals — production QSPI + I2C pinout
     let board_periph = init_board(
-        p.PSRAM, p.SPI2, p.DMA_CH0, p.I2C0, // peripherals
-        p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7,  // QSPI SIO0–SIO3
-        p.GPIO11, // TP_INT
-        p.GPIO12, // LCD_CS
-        p.GPIO13, // LCD_TE
-        p.GPIO14, p.GPIO15, // I2C SCL / SDA
-        p.GPIO38, // QSPI_SCLK
-        p.GPIO39, // LCD_RST
-        p.GPIO40, // TP_RST
+        p.PSRAM, p.SPI2, p.DMA_CH0, p.I2C0, p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7, p.GPIO11, p.GPIO12,
+        p.GPIO13, p.GPIO14, p.GPIO15, p.GPIO38, p.GPIO39, p.GPIO40,
     );
 
-    // Initialize RTOS timer + extract software interrupts
     let sw_int1;
     let sw_int2;
     {
@@ -118,32 +117,42 @@ async fn main(spawner: Spawner) -> ! {
         esp_rtos::start(timg0.timer0, sw_interrupt.software_interrupt0);
     }
 
-    // Initialize WiFi radio + network stack
     let net = system::net::init(p.WIFI).await;
 
-    // ── I²C bus manager ────────────────────────────────────────────────
     let i2c_bus = mk_static!(
         I2cBus,
         I2cBus::new(board_periph.i2c_bus, esp32::system::board::I2C_FREQ_KHZ)
     );
 
-    // Create one device handle per peripheral
     let touch_i2c = i2c_bus.device(0x5A, "touch");
     let oxymeter_i2c = i2c_bus.device(0x57, "oxymeter");
 
-    // Spawn WiFi service (connection + network stack tasks)
-    services::wifi::register(&spawner, net.controller, net.runner, bus);
+    // ── Storage ─────────────────────────────────────────────────────────
+    let storage = mk_static!(StorageService, StorageService::new(flash));
+    let stored_config = mk_static!(
+        Mutex<CriticalSectionRawMutex, StoredConfig>,
+        Mutex::new(StoredConfig::load(storage).await)
+    );
+    let stored_config: &'static Mutex<CriticalSectionRawMutex, StoredConfig> = stored_config;
+
+    // ── Crypto with stored key ──────────────────────────────────────────
+    let ascon_key = {
+        let cfg = stored_config.lock().await;
+        cfg.ascon_key
+    };
+    let cipher = crypto::Ascon::new(&ascon_key);
+
+    // ── WiFi with stored credentials ────────────────────────────────────
+    services::wifi::register(&spawner, net.controller, net.runner, bus, stored_config);
     info!("WiFi connecting in background…");
 
-    // Spawn NTP time sync (will sync once WiFi is up)
     services::time::register(&spawner, net.stack, bus);
 
-    // ── Start core 1: LVGL rendering + flush + touch ───────────────────
+    // ── Start core 1 ────────────────────────────────────────────────────
     {
         let core1_stack = CORE1_STACK.init(Stack::new());
         let render_config = ui::RenderConfig::production();
 
-        // Wrap !Send peripherals for cross-core transfer.
         let qspi_spi = SendWrap(board_periph.qspi_spi);
         let qspi_rx = SendWrap(board_periph.qspi_rx);
         let qspi_tx = SendWrap(board_periph.qspi_tx);
@@ -155,7 +164,6 @@ async fn main(spawner: Spawner) -> ! {
         start_second_core(p.CPU_CTRL, sw_int1, core1_stack, move || {
             let executor = CORE1_EXECUTOR.init(Executor::new());
             executor.run(|core1_spawner| {
-                // Create interrupt executor for the flush task.
                 let int_exec = mk_static!(
                     esp_rtos::embassy::InterruptExecutor::<2>,
                     esp_rtos::embassy::InterruptExecutor::new(sw_int2)
@@ -175,6 +183,8 @@ async fn main(spawner: Spawner) -> ! {
                         t_i2c,
                         render_config,
                         bus,
+                        storage,
+                        stored_config,
                     )
                     .unwrap(),
                 );
@@ -184,9 +194,7 @@ async fn main(spawner: Spawner) -> ! {
         info!("Core 1: started");
     }
 
-    let cipher = crypto::Ascon::new(config::ASCON_KEY);
-
-    // One-time crypto self-test
+    // Crypto self-test
     {
         let test_data = [0xAAu8; 4];
         let (ct, nonce) = cipher.encrypt(&test_data);
@@ -195,28 +203,13 @@ async fn main(spawner: Spawner) -> ! {
         info!("Crypto self-test passed");
     }
 
-    // Spawn MQTT service (consumes encrypted payloads from bus.data_channel)
     services::mqtt::register(&spawner, net.stack, bus);
 
-    // Spawn sensing service (MAX30102 vitals producer + die temp + encryption pipeline)
     services::sensing::register(&spawner, oxymeter_i2c, cipher, bus, unsafe {
         core::mem::transmute(p.SENS)
     })
     .await;
 
-    // GPS service disabled — antenna/RF issues pending hardware fix
-    // let gps_i2c = i2c_bus.device(0x50, "gps");
-    // services::gps::register(&spawner, gps_i2c, bus);
-
-    // Storage smoke test
-    {
-        let storage = mk_static!(StorageService, StorageService::new());
-        storage.write("smoke_test", b"hello").await;
-        let val = storage.read("smoke_test").await;
-        info!("Storage smoke test: {:?}", val.map(|v| v.len()));
-    }
-
-    // Idle loop
     info!(
         "System running. Free heap: {} bytes",
         esp_alloc::HEAP.free()

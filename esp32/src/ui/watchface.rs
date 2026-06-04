@@ -118,13 +118,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
         let wlb = lv_label_create(p);
         lv_label_set_text(wlb, c"WiFi".as_ptr());
         lv_obj_set_style_text_color(wlb, overlay, 0);
-        lv_obj_align_to(
-            wlb,
-            wl,
-            lv_align_t_LV_ALIGN_OUT_RIGHT_MID,
-            6,
-            0,
-        );
+        lv_obj_align_to(wlb, wl, lv_align_t_LV_ALIGN_OUT_RIGHT_MID, 6, 0);
 
         // ── MQTT indicator ─────────────────────────────────────
         let ml = lv_led_create(p);
@@ -136,13 +130,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
         let mlb = lv_label_create(p);
         lv_label_set_text(mlb, c"MQTT".as_ptr());
         lv_obj_set_style_text_color(mlb, overlay, 0);
-        lv_obj_align_to(
-            mlb,
-            ml,
-            lv_align_t_LV_ALIGN_OUT_RIGHT_MID,
-            6,
-            0,
-        );
+        lv_obj_align_to(mlb, ml, lv_align_t_LV_ALIGN_OUT_RIGHT_MID, 6, 0);
 
         // ── Battery ────────────────────────────────────────────
         let bb = lv_bar_create(p);
@@ -158,13 +146,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
         let bp = lv_label_create(p);
         lv_label_set_text(bp, c"85%".as_ptr());
         lv_obj_set_style_text_color(bp, overlay, 0);
-        lv_obj_align_to(
-            bp,
-            bb,
-            lv_align_t_LV_ALIGN_OUT_RIGHT_MID,
-            8,
-            0,
-        );
+        lv_obj_align_to(bp, bb, lv_align_t_LV_ALIGN_OUT_RIGHT_MID, 8, 0);
 
         Handles {
             hour_hand: hh,

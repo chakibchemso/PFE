@@ -10,7 +10,7 @@ use esp_hal::{Config, clock::CpuClock, peripherals::Peripherals};
 pub fn init_system() -> Peripherals {
     rtt_target::rtt_init_defmt!();
 
-    let config = Config::default().with_cpu_clock(CpuClock::_80MHz);
+    let config = Config::default().with_cpu_clock(CpuClock::_240MHz);
     let p = esp_hal::init(config);
 
     p
