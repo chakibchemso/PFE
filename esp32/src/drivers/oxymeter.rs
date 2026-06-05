@@ -9,9 +9,16 @@ use max3010x_async::{
     marker::{ic::Max30102, mode::Oximeter},
 };
 
-use crate::drivers::bus::{BusError, I2cPeripheral};
-use crate::dsp::{BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Spo2Calculator};
+/// IR DC mean below this threshold indicates no finger on the sensor.
+const FINGER_DC_THRESHOLD: f32 = 500_000.0;
 
+use crate::drivers::bus::{BusError, I2cPeripheral};
+use crate::dsp::{
+    BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Smoother, Spo2Calculator,
+};
+
+#[cfg(feature = "plot")]
+use defmt::println;
 // Plotter integration
 #[cfg(feature = "plot")]
 use crate::plotter::PlotMessage;
@@ -39,6 +46,12 @@ pub struct OxymeterRunner {
 
     bpm_calc: BpmCalculator,
     spo2_calc: Spo2Calculator,
+    bpm_smoother: Smoother,
+    spo2_smoother: Smoother,
+
+    // Finger detection
+    finger_present: bool,
+    no_finger_batches: u32,
 
     // Plotter for compact text output
     #[cfg(feature = "plot")]
@@ -56,6 +69,9 @@ impl OxymeterRunner {
         #[cfg(feature = "plot")]
         self.send_plot_registration();
 
+        // Seed: assume finger is present until proven otherwise
+        self.finger_present = true;
+
         loop {
             if self.sensor.get_available_sample_count().await.unwrap_or(0) == 0 {
                 Timer::after(Duration::from_millis(10)).await;
@@ -72,6 +88,10 @@ impl OxymeterRunner {
                 Ok(samples_read) => {
                     read_time = Instant::now().as_micros() - chrono;
                     sample_count = samples_read;
+
+                    // Track the last IR DC mean in the batch for finger detection
+                    let mut last_dc_ir = 0.0f32;
+
                     for i in 0..(samples_read as usize) {
                         let red = fifo_buffer[i * 2];
                         let ir = fifo_buffer[i * 2 + 1];
@@ -82,6 +102,7 @@ impl OxymeterRunner {
                         // 1. Strip the DC offset (and save the mean for SpO2 math)
                         let (pre_dc_red, dc_mean_red) = self.dc_block_red.process(raw_red);
                         let (pre_dc_ir, dc_mean_ir) = self.dc_block_ir.process(raw_ir);
+                        last_dc_ir = dc_mean_ir;
 
                         // 2. Apply the FIR Bandpass
                         let clean_red = self.bandpass_red.process(pre_dc_red);
@@ -101,7 +122,27 @@ impl OxymeterRunner {
 
                         // Feed the ultimate smoothed signal into BPM calc
                         if let Some(new_bpm) = self.bpm_calc.process_sample(clean_red) {
-                            sender.send((new_bpm as u8, current_spo2 as u8, 36u8));
+                            self.finger_present = true;
+                            let smooth_bpm = self.bpm_smoother.process(new_bpm);
+                            let smooth_spo2 = self.spo2_smoother.process(current_spo2);
+                            sender.send((smooth_bpm as u8, smooth_spo2 as u8, 36u8));
+                        }
+                    }
+
+                    // ── Finger detection via IR DC threshold ──────────────
+                    if last_dc_ir < FINGER_DC_THRESHOLD {
+                        self.no_finger_batches += 1;
+                        // Require 3 consecutive batches (≈300 ms) to confirm no finger
+                        if self.no_finger_batches >= 3 && self.finger_present {
+                            self.finger_present = false;
+                            self.bpm_smoother.reset();
+                            self.spo2_smoother.reset();
+                            sender.send((0, 0, 0));
+                        }
+                    } else {
+                        self.no_finger_batches = 0;
+                        if !self.finger_present {
+                            self.finger_present = true;
                         }
                     }
                 }
@@ -213,10 +254,12 @@ impl OxymeterHandle {
             bandpass_ir: FirFilter::new(FIR_COEFFS),
             bpm_calc: BpmCalculator::new(100.0),
             spo2_calc: Spo2Calculator::new(),
+            bpm_smoother: Smoother::new(0.20, 0.40),
+            spo2_smoother: Smoother::new(0.05, 0.30),
+            finger_present: true,
+            no_finger_batches: 0,
             #[cfg(feature = "plot")]
             plot_msg: PlotMessage::new(),
-            // #[cfg(feature = "plot")]
-            // samples_sent: 0,
         };
 
         spawner.spawn(acquisition_task(runner, sender).unwrap());

@@ -4,4 +4,4 @@ pub mod metrics;
 
 pub use coeffs::FIR_COEFFS;
 pub use filters::{FirFilter, MovingAverage, MovingMeanSubtractor};
-pub use metrics::{BpmCalculator, RollingEnergy, Spo2Calculator};
+pub use metrics::{BpmCalculator, RollingEnergy, Smoother, Spo2Calculator};

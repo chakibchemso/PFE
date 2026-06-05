@@ -84,6 +84,42 @@ impl BpmCalculator {
     }
 }
 
+/// Combines a rate-of-change limiter with an exponential moving average to
+/// reject motion-artifact spikes while keeping the displayed value responsive.
+pub struct Smoother {
+    max_pct_change: f32,
+    alpha: f32,
+    smoothed: f32,
+    has_value: bool,
+}
+
+impl Smoother {
+    pub const fn new(max_pct_change: f32, alpha: f32) -> Self {
+        Self {
+            max_pct_change,
+            alpha,
+            smoothed: 0.0,
+            has_value: false,
+        }
+    }
+
+    pub fn process(&mut self, raw: f32) -> f32 {
+        if !self.has_value {
+            self.smoothed = raw;
+            self.has_value = true;
+            return raw;
+        }
+        let bound = self.smoothed * self.max_pct_change;
+        let clamped = raw.clamp(self.smoothed - bound, self.smoothed + bound);
+        self.smoothed = self.alpha * clamped + (1.0 - self.alpha) * self.smoothed;
+        self.smoothed
+    }
+
+    pub fn reset(&mut self) {
+        self.has_value = false;
+    }
+}
+
 /// Calculates SpO2 using the Ratio of Ratios method
 pub struct Spo2Calculator {
     energy_red: RollingEnergy<100>,

@@ -2,6 +2,7 @@
 //! `lv_timer_handler()` loop with vitals polling and theme updates.
 
 use alloc::vec::Vec;
+use core::ffi::CStr;
 use core::sync::atomic::Ordering;
 
 use defmt::trace;
@@ -10,6 +11,7 @@ use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use embassy_sync::watch::Receiver;
 use embassy_time::{Duration, Timer};
+use lv_bevy_ecs::cstr;
 use lv_bevy_ecs::functions::{NextTimerPeriod, lv_init, lv_tick_set_cb, lv_timer_handler};
 
 use embassy_executor::Spawner;
@@ -258,49 +260,78 @@ pub async fn render_task(
         // Poll vitals
         if let Some(ref mut rx) = vitals_rx {
             if let Some((hr, spo2, temp)) = rx.try_changed() {
-                // BPM ring buffer
-                bpm_buf[bpm_idx] = hr;
-                bpm_idx = (bpm_idx + 1) % 10;
-                bpm_count = core::cmp::min(bpm_count + 1, 10);
-                let min = *bpm_buf[..bpm_count].iter().min().unwrap();
-                let max = *bpm_buf[..bpm_count].iter().max().unwrap();
+                if hr == 0 && spo2 == 0 {
+                    // No finger on sensor — show placeholder + reset BPM buffer
+                    bpm_count = 0;
+                    bpm_idx = 0;
+                    unsafe {
+                        lv_bevy_ecs::sys::lv_label_set_text(
+                            handles.vitals.bpm_label,
+                            cstr!("-- BPM").as_ptr(),
+                        );
+                        lv_bevy_ecs::sys::lv_bar_set_start_value(
+                            handles.vitals.bpm_range_bar, 0, false);
+                        lv_bevy_ecs::sys::lv_bar_set_value(
+                            handles.vitals.bpm_range_bar, 0, false);
+                        lv_bevy_ecs::sys::lv_slider_set_value(
+                            handles.vitals.bpm_slider, 0, false);
+                        lv_bevy_ecs::sys::lv_label_set_text(
+                            handles.vitals.spo2_label,
+                            cstr!("SpO2 --%").as_ptr(),
+                        );
+                        lv_bevy_ecs::sys::lv_bar_set_value(
+                            handles.vitals.spo2_bar, 0, false);
+                        lv_bevy_ecs::sys::lv_label_set_text(
+                            handles.vitals.temp_label,
+                            cstr!("--°C").as_ptr(),
+                        );
+                    }
+                } else {
+                    // BPM ring buffer
+                    bpm_buf[bpm_idx] = hr;
+                    bpm_idx = (bpm_idx + 1) % 10;
+                    bpm_count = core::cmp::min(bpm_count + 1, 10);
+                    let min = *bpm_buf[..bpm_count].iter().min().unwrap();
+                    let max = *bpm_buf[..bpm_count].iter().max().unwrap();
 
-                unsafe {
-                    // BPM label + range bar + slider
-                    set_label_u8(handles.vitals.bpm_label, hr, " BPM");
-                    lv_bevy_ecs::sys::lv_bar_set_start_value(
-                        handles.vitals.bpm_range_bar,
-                        min as i32,
-                        false,
-                    );
-                    lv_bevy_ecs::sys::lv_bar_set_value(
-                        handles.vitals.bpm_range_bar,
-                        max as i32,
-                        false,
-                    );
-                    lv_bevy_ecs::sys::lv_slider_set_value(
-                        handles.vitals.bpm_slider,
-                        hr as i32,
-                        false,
-                    );
+                    unsafe {
+                        // BPM label + range bar + slider
+                        set_label_u8(handles.vitals.bpm_label, hr, " BPM");
+                        lv_bevy_ecs::sys::lv_bar_set_start_value(
+                            handles.vitals.bpm_range_bar,
+                            min as i32,
+                            false,
+                        );
+                        lv_bevy_ecs::sys::lv_bar_set_value(
+                            handles.vitals.bpm_range_bar,
+                            max as i32,
+                            false,
+                        );
+                        lv_bevy_ecs::sys::lv_slider_set_value(
+                            handles.vitals.bpm_slider,
+                            hr as i32,
+                            false,
+                        );
 
-                    // SpO₂ label + bar with color threshold
-                    set_label_u8(handles.vitals.spo2_label, spo2, "% SpO2");
-                    let pal = crate::ui::theme::current_palette();
-                    let spo2_color = if spo2 < 80 {
-                        pal.unhealthy_color
-                    } else {
-                        pal.healthy_color
-                    };
-                    lv_bevy_ecs::sys::lv_obj_set_style_bg_color(
-                        handles.vitals.spo2_bar,
-                        lv_bevy_ecs::functions::lv_color_hex(spo2_color),
-                        lv_bevy_ecs::sys::lv_part_t_LV_PART_INDICATOR,
-                    );
-                    lv_bevy_ecs::sys::lv_bar_set_value(handles.vitals.spo2_bar, spo2 as i32, false);
+                        // SpO₂ label + bar with color threshold
+                        set_label_u8(handles.vitals.spo2_label, spo2, "% SpO2");
+                        let pal = crate::ui::theme::current_palette();
+                        let spo2_color = if spo2 < 80 {
+                            pal.unhealthy_color
+                        } else {
+                            pal.healthy_color
+                        };
+                        lv_bevy_ecs::sys::lv_obj_set_style_bg_color(
+                            handles.vitals.spo2_bar,
+                            lv_bevy_ecs::functions::lv_color_hex(spo2_color),
+                            lv_bevy_ecs::sys::lv_part_t_LV_PART_INDICATOR,
+                        );
+                        lv_bevy_ecs::sys::lv_bar_set_value(
+                            handles.vitals.spo2_bar, spo2 as i32, false);
 
-                    // Temperature
-                    set_label_u8(handles.vitals.temp_label, temp, "°C");
+                        // Temperature
+                        set_label_u8(handles.vitals.temp_label, temp, "°C");
+                    }
                 }
             }
         }
