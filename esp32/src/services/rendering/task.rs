@@ -9,12 +9,13 @@ use core::ffi::c_void;
 use core::slice::from_raw_parts;
 
 use defmt::trace;
-
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
+use esp_hal::gpio::Input;
 
 use crate::services::rendering::display::SendDisplay;
 use crate::ui::config::PRODUCTION_UI_SIZE;
+use crate::utils::SendWrap;
 
 /// Screen dimensions in LVGL pixel coordinates.
 pub const SCREEN_W: i32 = PRODUCTION_UI_SIZE as i32;
@@ -121,9 +122,10 @@ unsafe extern "C" fn wait_callback(disp: *mut lv_bevy_ecs::sys::lv_display_t) {
 
 /// Flush task: runs on the high-priority interrupt executor.
 /// Receives pixel data from LVGL's flush callback, drains brightness
-/// channel, writes to the CO5300 display via DMA, signals completion.
+/// channel, waits for TE low (vertical blanking), writes to the CO5300
+/// display via DMA, signals completion.
 #[embassy_executor::task]
-pub async fn flush_task(mut display: SendDisplay) -> ! {
+pub async fn flush_task(mut display: SendDisplay, mut te: SendWrap<Input<'static>>) -> ! {
     DISPLAY_READY.signal(());
 
     let flush_sender = FLUSH_DONE.sender();
@@ -138,7 +140,10 @@ pub async fn flush_task(mut display: SendDisplay) -> ! {
             w,
             h,
         } = DRAW.receive().await;
-        trace!("F: got DRAW — writing pixels");
+        trace!("F: got DRAW — write_pixels");
+
+        // Wait for vertical blanking (TE low) to prevent tearing
+        let _ = te.0.wait_for_low().await;
 
         let area = display_driver::Area::new(x, y, w, h);
         let fc = display_driver::bus::FrameControl::new_standalone();

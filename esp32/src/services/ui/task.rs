@@ -15,6 +15,9 @@ use lv_bevy_ecs::cstr;
 use lv_bevy_ecs::functions::{NextTimerPeriod, lv_init, lv_tick_set_cb, lv_timer_handler};
 
 use embassy_executor::Spawner;
+use esp_hal::gpio::Input;
+
+use crate::utils::SendWrap;
 
 /// Channel for settings saves from UI callbacks (non-async → async bridge).
 /// Keyboard/GMT overlays send pending saves here; the render loop processes them.
@@ -92,6 +95,7 @@ pub async fn render_task(
     _spawner: Spawner,
     hi_spawner: embassy_executor::SendSpawner,
     display: SendDisplay,
+    te: Input<'static>,
     mut vitals_rx: Option<VitalsReceiver>,
     mut wifi_rx: Option<WifiReceiver>,
     mut mqtt_rx: Option<MqttReceiver>,
@@ -110,7 +114,7 @@ pub async fn render_task(
     let _disp = unsafe { init_lvgl_display() };
 
     // 3. Spawn flush task on interrupt executor
-    hi_spawner.spawn(flush_task(display).unwrap());
+    hi_spawner.spawn(flush_task(display, SendWrap(te)).unwrap());
 
     // 4. Wait for display ready
     DISPLAY_READY.wait().await;

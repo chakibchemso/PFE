@@ -8,7 +8,7 @@ use embassy_sync::mutex::Mutex;
 use esp_hal::{
     Async,
     dma::{DmaRxBuf, DmaTxBuf},
-    gpio::Output,
+    gpio::{Input, Output},
     interrupt::software::SoftwareInterruptControl,
     spi::master::SpiDma,
     system::Stack,
@@ -50,6 +50,8 @@ async fn core1_bootstrap(
     qspi_tx: SendWrap<DmaTxBuf>,
     cs: SendWrap<Output<'static>>,
     rst: SendWrap<Output<'static>>,
+    display_te: SendWrap<Input<'static>>,
+    touch_int: SendWrap<Input<'static>>,
     touch_rst: SendWrap<Output<'static>>,
     touch_i2c: SendWrap<I2cPeripheral>,
     render_config: ui::RenderConfig,
@@ -74,6 +76,7 @@ async fn core1_bootstrap(
             spawner,
             hi_spawner,
             send_display,
+            display_te.0,
             vitals_rx,
             wifi_rx,
             mqtt_rx,
@@ -85,8 +88,10 @@ async fn core1_bootstrap(
         .unwrap(),
     );
 
-    spawner
-        .spawn(services::touch::task::touch_task(touch_i2c.0, touch_rst.0, render_config).unwrap());
+    spawner.spawn(
+        services::touch::task::touch_task(touch_i2c.0, touch_rst.0, render_config, touch_int.0)
+            .unwrap(),
+    );
 
     info!("Core 1: LVGL + flush + touch running");
 
@@ -163,6 +168,8 @@ async fn main(spawner: Spawner) -> ! {
         let rst = SendWrap(board_periph.display_rst);
         let t_rst = SendWrap(board_periph.touch_rst);
         let t_i2c = SendWrap(touch_i2c);
+        let display_te = SendWrap(board_periph.display_te);
+        let touch_int = SendWrap(board_periph.touch_int);
 
         start_second_core(p.CPU_CTRL, sw_int1, core1_stack, move || {
             let executor = CORE1_EXECUTOR.init(Executor::new());
@@ -182,6 +189,8 @@ async fn main(spawner: Spawner) -> ! {
                         qspi_tx,
                         cs,
                         rst,
+                        display_te,
+                        touch_int,
                         t_rst,
                         t_i2c,
                         render_config,

@@ -11,7 +11,7 @@ use super::display_settings::display_settings_overlay;
 use super::gmt::{LAST_GMT_OFFSET, gmt_overlay};
 use super::keyboard::keyboard_overlay;
 use super::power_settings::power_settings_overlay;
-use super::theme::{current_palette, CURRENT_THEME};
+use super::theme::current_palette;
 
 struct SettingsHandles {
     labels: [*mut lv_obj_t; 6],
@@ -21,16 +21,6 @@ struct SettingsHandles {
 
 static SETTINGS_DATA: AtomicPtr<SettingsHandles> = AtomicPtr::new(core::ptr::null_mut());
 
-fn entry_text_color() -> u32 {
-    if CURRENT_THEME.load(Ordering::Relaxed) == 1 {
-        // Mocha: use latte text (dark)
-        0x4c4f69
-    } else {
-        // Latte: use mocha text (light)
-        0xcdd6f4
-    }
-}
-
 pub fn re_theme() {
     let ptr = SETTINGS_DATA.load(Ordering::Relaxed);
     if ptr.is_null() {
@@ -38,7 +28,7 @@ pub fn re_theme() {
     }
     let d = unsafe { &*ptr };
     let pal = current_palette();
-    let text = lv_color_hex(entry_text_color());
+    let text = lv_color_hex(pal.alt_text);
     let bg = lv_color_hex(pal.bg_color);
 
     for &label in &d.labels {
@@ -95,7 +85,7 @@ pub fn create(parent: &mut Wdg) {
     // ── Config rows ──────────────────────────────────────────────────────
     let mut row_y = 30;
     let row_h = 50;
-    let text_color = entry_text_color();
+    let text_color = current_palette().alt_text;
 
     // Collect label handles for re-theming
     let mut label_idx = 0usize;

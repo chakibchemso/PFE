@@ -20,6 +20,13 @@ async fn power_task(
         defmt::error!("AXP2101 init failed: {}", defmt::Debug2Format(&e));
     }
 
+    if let Err(e) = pmic.disable_ts_pin_measure().await {
+        defmt::error!(
+            "AXP2101 disable TS measure failed: {}",
+            defmt::Debug2Format(&e)
+        );
+    }
+
     // LiHV battery: nominal 3.88V, charge 4.47V
     if let Err(e) = pmic.enable_cell_battery_charge().await {
         defmt::error!("AXP2101 enable charge failed: {}", defmt::Debug2Format(&e));

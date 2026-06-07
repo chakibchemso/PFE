@@ -14,6 +14,7 @@ use lv_bevy_ecs::sys::{
 pub struct ThemePalette {
     pub bg_color: u32,
     pub text_color: u32,
+    pub alt_text: u32,
     pub surface_color: u32,
     pub overlay_color: u32,
     pub accent_color: u32,
@@ -24,6 +25,7 @@ pub struct ThemePalette {
 pub const LATTE: ThemePalette = ThemePalette {
     bg_color: 0xeff1f5,
     text_color: 0x4c4f69,
+    alt_text: 0xcdd6f4, // mocha text
     surface_color: 0xe6e9ef,
     overlay_color: 0x9ca0b0,
     accent_color: 0x1e66f5,
@@ -34,6 +36,7 @@ pub const LATTE: ThemePalette = ThemePalette {
 pub const MOCHA: ThemePalette = ThemePalette {
     bg_color: 0x1e1e2e,
     text_color: 0xcdd6f4,
+    alt_text: 0x4c4f69, // latte text
     surface_color: 0x313244,
     overlay_color: 0x6c7086,
     accent_color: 0x89b4fa,
