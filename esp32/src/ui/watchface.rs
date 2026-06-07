@@ -141,10 +141,10 @@ pub fn create(parent: &mut Wdg) -> Handles {
         lv_obj_set_style_radius(bb, 7, 0);
         lv_obj_set_style_bg_color(bb, accent, lv_part_t_LV_PART_INDICATOR);
         lv_obj_set_style_radius(bb, 7, lv_part_t_LV_PART_INDICATOR);
-        lv_bar_set_value(bb, 85, false);
+        lv_bar_set_value(bb, 0, false);
 
         let bp = lv_label_create(p);
-        lv_label_set_text(bp, c"85%".as_ptr());
+        lv_label_set_text(bp, c"NA".as_ptr());
         lv_obj_set_style_text_color(bp, overlay, 0);
         lv_obj_align_to(bp, bb, lv_align_t_LV_ALIGN_OUT_RIGHT_MID, 8, 0);
 

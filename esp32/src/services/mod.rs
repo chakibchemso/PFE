@@ -10,6 +10,7 @@
 
 pub mod gps;
 pub mod mqtt;
+pub mod power;
 pub mod rendering;
 pub mod sensing;
 pub mod storage;

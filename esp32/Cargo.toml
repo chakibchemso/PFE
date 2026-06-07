@@ -24,6 +24,9 @@ name = "hello_test"
 
 
 [dependencies]
+# ! ### pmic ###
+axp2101 = { package = "axp2101-embedded", version = "0.3", features = ["async"] }
+
 # ! ### project crates ###
 # crypto
 ascon-aead = "0.5"

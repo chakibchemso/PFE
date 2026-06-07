@@ -1,6 +1,7 @@
 use defmt::{info, trace};
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_sync::watch::Sender;
 use embassy_time::{Duration, Instant, Timer};
 use max3010x_async::{AdcRange, SamplingRate};
@@ -11,6 +12,10 @@ use max3010x_async::{
 
 /// IR DC mean below this threshold indicates no finger on the sensor.
 const FINGER_DC_THRESHOLD: f32 = 500_000.0;
+
+/// Waveform samples (clean_red, clean_ir) sent per-sample from the oxymeter
+/// acquisition task and consumed by the UI render loop for the PPG chart.
+pub static WAVEFORM_CHANNEL: Channel<CriticalSectionRawMutex, (i16, i16), 256> = Channel::new();
 
 use crate::drivers::bus::{BusError, I2cPeripheral};
 use crate::dsp::{
@@ -107,6 +112,9 @@ impl OxymeterRunner {
                         // 2. Apply the FIR Bandpass
                         let clean_red = self.bandpass_red.process(pre_dc_red);
                         let clean_ir = self.bandpass_ir.process(pre_dc_ir);
+
+                        // 2b. Send waveform sample for the PPG chart
+                        let _ = WAVEFORM_CHANNEL.try_send((clean_red as i16, clean_ir as i16));
 
                         // 3. Continuously calculate the current SpO2 percentage
                         let current_spo2 = self.spo2_calc.process_sample(

@@ -67,6 +67,7 @@ async fn core1_bootstrap(
     let wifi_rx = bus.wifi_status.receiver();
     let mqtt_rx = bus.mqtt_status.receiver();
     let utc_rx = bus.utc_epoch.receiver();
+    let battery_rx = bus.battery.receiver();
 
     spawner.spawn(
         services::ui::task::render_task(
@@ -77,6 +78,7 @@ async fn core1_bootstrap(
             wifi_rx,
             mqtt_rx,
             utc_rx,
+            battery_rx,
             storage,
             stored_config,
         )
@@ -126,6 +128,7 @@ async fn main(spawner: Spawner) -> ! {
 
     let touch_i2c = i2c_bus.device(0x5A, "touch");
     let oxymeter_i2c = i2c_bus.device(0x57, "oxymeter");
+    let axp2101_i2c = i2c_bus.device(0x34, "axp2101");
 
     // ── Storage ─────────────────────────────────────────────────────────
     let storage = mk_static!(StorageService, StorageService::new(flash));
@@ -209,6 +212,8 @@ async fn main(spawner: Spawner) -> ! {
         core::mem::transmute(p.SENS)
     })
     .await;
+
+    services::power::register(&spawner, axp2101_i2c, bus).await;
 
     info!(
         "System running. Free heap: {} bytes",

@@ -26,6 +26,8 @@ pub struct PendingSave {
 
 pub static PENDING_SAVES: Channel<CriticalSectionRawMutex, PendingSave, 8> = Channel::new();
 
+use crate::app::bus::BatteryState;
+use crate::drivers::oxymeter::WAVEFORM_CHANNEL;
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{
     BRIGHTNESS_CHANNEL, DISPLAY_READY, flush_task, init_lvgl_display,
@@ -50,6 +52,9 @@ type MqttReceiver = Receiver<'static, CriticalSectionRawMutex, bool, 2>;
 
 /// Receiver for UTC epoch from NTP sync.
 type UtcReceiver = Receiver<'static, CriticalSectionRawMutex, u64, 2>;
+
+/// Receiver for battery state.
+type BatteryReceiver = Receiver<'static, CriticalSectionRawMutex, BatteryState, 2>;
 
 /// Set an LVGL label to a formatted value, e.g. `set_label(handle, 72, " BPM")`
 /// produces `"72 BPM"`. Uses `lv_label_set_text` directly with a stack buffer.
@@ -91,6 +96,7 @@ pub async fn render_task(
     mut wifi_rx: Option<WifiReceiver>,
     mut mqtt_rx: Option<MqttReceiver>,
     utc_rx: Option<UtcReceiver>,
+    mut battery_rx: Option<BatteryReceiver>,
     storage: &'static StorageService,
     stored_config: &'static Mutex<CriticalSectionRawMutex, StoredConfig>,
 ) -> ! {
@@ -270,17 +276,17 @@ pub async fn render_task(
                             cstr!("-- BPM").as_ptr(),
                         );
                         lv_bevy_ecs::sys::lv_bar_set_start_value(
-                            handles.vitals.bpm_range_bar, 0, false);
-                        lv_bevy_ecs::sys::lv_bar_set_value(
-                            handles.vitals.bpm_range_bar, 0, false);
-                        lv_bevy_ecs::sys::lv_slider_set_value(
-                            handles.vitals.bpm_slider, 0, false);
+                            handles.vitals.bpm_range_bar,
+                            0,
+                            false,
+                        );
+                        lv_bevy_ecs::sys::lv_bar_set_value(handles.vitals.bpm_range_bar, 0, false);
+                        lv_bevy_ecs::sys::lv_slider_set_value(handles.vitals.bpm_slider, 0, false);
                         lv_bevy_ecs::sys::lv_label_set_text(
                             handles.vitals.spo2_label,
                             cstr!("SpO2 --%").as_ptr(),
                         );
-                        lv_bevy_ecs::sys::lv_bar_set_value(
-                            handles.vitals.spo2_bar, 0, false);
+                        lv_bevy_ecs::sys::lv_bar_set_value(handles.vitals.spo2_bar, 0, false);
                         lv_bevy_ecs::sys::lv_label_set_text(
                             handles.vitals.temp_label,
                             cstr!("--°C").as_ptr(),
@@ -327,12 +333,31 @@ pub async fn render_task(
                             lv_bevy_ecs::sys::lv_part_t_LV_PART_INDICATOR,
                         );
                         lv_bevy_ecs::sys::lv_bar_set_value(
-                            handles.vitals.spo2_bar, spo2 as i32, false);
+                            handles.vitals.spo2_bar,
+                            spo2 as i32,
+                            false,
+                        );
 
                         // Temperature
                         set_label_u8(handles.vitals.temp_label, temp, "°C");
                     }
                 }
+            }
+        }
+
+        // Drain waveform samples into PPG chart
+        while let Ok((red, ir)) = WAVEFORM_CHANNEL.try_receive() {
+            unsafe {
+                lv_bevy_ecs::sys::lv_chart_set_next_value(
+                    handles.vitals.chart,
+                    handles.vitals.red_series,
+                    red as i32,
+                );
+                lv_bevy_ecs::sys::lv_chart_set_next_value(
+                    handles.vitals.chart,
+                    handles.vitals.ir_series,
+                    ir as i32,
+                );
             }
         }
 
@@ -365,6 +390,50 @@ pub async fn render_task(
                         lv_bevy_ecs::sys::lv_led_on(handles.watchface.mqtt_led);
                     } else {
                         lv_bevy_ecs::sys::lv_led_off(handles.watchface.mqtt_led);
+                    }
+                }
+            }
+        }
+
+        // Poll battery status
+        if let Some(ref mut rx) = battery_rx {
+            if let Some(state) = rx.try_changed() {
+                unsafe {
+                    if state.charging {
+                        lv_bevy_ecs::sys::lv_obj_set_style_bg_color(
+                            handles.watchface.battery_bar,
+                            lv_bevy_ecs::functions::lv_color_hex(0xa6e3a1),
+                            lv_bevy_ecs::sys::lv_part_t_LV_PART_INDICATOR,
+                        );
+                    } else {
+                        let pal = crate::ui::theme::current_palette();
+                        lv_bevy_ecs::sys::lv_obj_set_style_bg_color(
+                            handles.watchface.battery_bar,
+                            lv_bevy_ecs::functions::lv_color_hex(pal.accent_color),
+                            lv_bevy_ecs::sys::lv_part_t_LV_PART_INDICATOR,
+                        );
+                    }
+
+                    match state.pct {
+                        Some(pct) => {
+                            lv_bevy_ecs::sys::lv_bar_set_value(
+                                handles.watchface.battery_bar,
+                                pct as i32,
+                                false,
+                            );
+                            set_label_u8(handles.watchface.battery_pct, pct, "%");
+                        }
+                        None => {
+                            lv_bevy_ecs::sys::lv_bar_set_value(
+                                handles.watchface.battery_bar,
+                                0,
+                                false,
+                            );
+                            lv_bevy_ecs::sys::lv_label_set_text(
+                                handles.watchface.battery_pct,
+                                cstr!("NA").as_ptr(),
+                            );
+                        }
                     }
                 }
             }

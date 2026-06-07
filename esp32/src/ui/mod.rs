@@ -5,6 +5,7 @@ pub mod gmt;
 pub mod gps;
 pub mod keyboard;
 pub mod layout;
+pub mod power_settings;
 pub mod settings;
 pub mod theme;
 pub mod vitals;

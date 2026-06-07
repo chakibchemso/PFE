@@ -4,7 +4,9 @@ use lv_bevy_ecs::sys::{lv_dir_t_LV_DIR_LEFT, lv_dir_t_LV_DIR_RIGHT, lv_obj_t};
 use lv_bevy_ecs::widgets::Tileview;
 
 use super::theme::{self, current_palette};
-use super::{display_settings, ecg, gmt, gps, keyboard, settings, vitals, watchface};
+use super::{
+    display_settings, ecg, gmt, gps, keyboard, power_settings, settings, vitals, watchface,
+};
 
 /// Aggregated handles for all UI widgets that need runtime updates.
 pub struct AppHandles {
@@ -88,4 +90,6 @@ pub fn apply_theme(h: &AppHandles) {
     keyboard::re_theme();
     gmt::re_theme();
     display_settings::re_theme();
+    power_settings::re_theme();
+    settings::re_theme();
 }

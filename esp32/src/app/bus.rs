@@ -8,6 +8,13 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::watch::Watch;
 
+/// Battery state published by the power service.
+#[derive(Clone, Copy, defmt::Format)]
+pub struct BatteryState {
+    pub pct: Option<u8>,
+    pub charging: bool,
+}
+
 /// Parsed GPS fix data published by the GPS service.
 #[derive(Clone, Copy, Default, defmt::Format)]
 pub struct GpsFix {
@@ -51,6 +58,8 @@ pub struct SystemBus {
     pub cpu_temp: Watch<CriticalSectionRawMutex, i8, 2>,
     /// UTC epoch seconds, updated by the NTP sync service
     pub utc_epoch: Watch<CriticalSectionRawMutex, u64, 2>,
+    /// Battery state: (percentage, is_charging)
+    pub battery: Watch<CriticalSectionRawMutex, BatteryState, 2>,
 }
 
 impl SystemBus {
@@ -63,6 +72,7 @@ impl SystemBus {
             data_channel: Channel::new(),
             cpu_temp: Watch::new(),
             utc_epoch: Watch::new(),
+            battery: Watch::new(),
         }
     }
 }
