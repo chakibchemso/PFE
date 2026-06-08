@@ -144,15 +144,16 @@
 
 #define LV_BIG_ENDIAN_SYSTEM 0
 
-#define LV_ATTRIBUTE_TICK_INC
-#define LV_ATTRIBUTE_TIMER_HANDLER
-#define LV_ATTRIBUTE_FLUSH_READY
+#define LV_ATTRIBUTE_TICK_INC  __attribute__((section(".iram1")))
+#define LV_ATTRIBUTE_TIMER_HANDLER  __attribute__((section(".iram1")))
+#define LV_ATTRIBUTE_FLUSH_READY  __attribute__((section(".iram1")))
 
-#define LV_ATTRIBUTE_MEM_ALIGN_SIZE 4
-#define LV_ATTRIBUTE_MEM_ALIGN  __attribute__((aligned(4)))
+#define LV_ATTRIBUTE_MEM_ALIGN_SIZE 32
+#define LV_ATTRIBUTE_MEM_ALIGN  __attribute__((aligned(32)))
 #define LV_ATTRIBUTE_LARGE_CONST
-#define LV_ATTRIBUTE_LARGE_RAM_ARRAY
-#define LV_ATTRIBUTE_FAST_MEM
+#define LV_ATTRIBUTE_LARGE_RAM_ARRAY  __attribute__((section(".dram1")))
+#define LV_ATTRIBUTE_FAST_MEM  __attribute__((section(".iram1")))
+
 
 #define LV_EXPORT_CONST_INT(int_value) struct _silence_gcc_warning
 #define LV_ATTRIBUTE_EXTERN_DATA

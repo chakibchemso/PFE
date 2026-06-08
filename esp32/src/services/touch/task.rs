@@ -8,7 +8,7 @@ use crate::drivers::bus::I2cPeripheral;
 use crate::ui::config::RenderConfig;
 
 const TOUCH_READ_TIMEOUT: Duration = Duration::from_millis(50);
-const RELEASE_CONFIRM: Duration = Duration::from_millis(30);
+const RELEASE_CONFIRM: Duration = Duration::from_millis(10);
 const TOUCH_IDLE_TIMEOUT: Duration = Duration::from_millis(200);
 
 #[embassy_executor::task]

@@ -34,7 +34,7 @@ getrandom::register_custom_getrandom!(utils::custom_getrandom);
 // ── Core 1 statics ────────────────────────────────────────────────────────
 
 /// Stack for core 1's scheduler + embassy executor.
-static CORE1_STACK: StaticCell<Stack<65536>> = StaticCell::new();
+static CORE1_STACK: StaticCell<Stack<32768>> = StaticCell::new();
 
 /// Thread-mode executor for core 1 (LVGL render loop + touch).
 static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();

@@ -110,7 +110,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
 
         // ── WiFi indicator ─────────────────────────────────────
         let wl = lv_led_create(p);
-        lv_obj_set_pos(wl, CX - 75, CY + 115);
+        lv_obj_set_pos(wl, CX - 65, CY + 115);
         lv_obj_set_size(wl, 10, 10);
         lv_led_set_color(wl, lv_color_hex(0xa6e3a1));
         lv_led_off(wl);
@@ -122,7 +122,7 @@ pub fn create(parent: &mut Wdg) -> Handles {
 
         // ── MQTT indicator ─────────────────────────────────────
         let ml = lv_led_create(p);
-        lv_obj_set_pos(ml, CX - 10, CY + 115);
+        lv_obj_set_pos(ml, CX - 0, CY + 115);
         lv_obj_set_size(ml, 10, 10);
         lv_led_set_color(ml, lv_color_hex(0xa6e3a1));
         lv_led_off(ml);

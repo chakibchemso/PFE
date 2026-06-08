@@ -285,7 +285,7 @@ pub async fn render_task(
                             false,
                         );
                         lv_bevy_ecs::sys::lv_bar_set_value(handles.vitals.bpm_range_bar, 0, false);
-                        lv_bevy_ecs::sys::lv_slider_set_value(handles.vitals.bpm_slider, 0, false);
+                        lv_bevy_ecs::sys::lv_slider_set_value(handles.vitals.bpm_slider, 10, false);
                         lv_bevy_ecs::sys::lv_label_set_text(
                             handles.vitals.spo2_label,
                             cstr!("SpO2 --%").as_ptr(),
@@ -319,7 +319,7 @@ pub async fn render_task(
                         );
                         lv_bevy_ecs::sys::lv_slider_set_value(
                             handles.vitals.bpm_slider,
-                            hr as i32,
+                            (hr as i32).clamp(10, 190),
                             false,
                         );
 

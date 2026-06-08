@@ -85,7 +85,9 @@ pub fn create(parent: &mut lv_bevy_ecs::widgets::Wdg) -> Handles {
         lv_obj_set_style_bg_color(sl, accent, lv_part_t_LV_PART_KNOB);
         lv_obj_set_style_bg_opa(sl, 255, lv_part_t_LV_PART_KNOB);
         lv_obj_set_style_radius(sl, 7, lv_part_t_LV_PART_KNOB);
-        lv_slider_set_value(sl, 0, false);
+        lv_slider_set_value(sl, 10, false);
+        lv_obj_remove_flag(sl, lv_obj_flag_t_LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(sl, lv_obj_flag_t_LV_OBJ_FLAG_SCROLLABLE);
 
         // ── SpO₂ ─────────────────────────────────────────────
         let s2l = lv_label_create(p);
