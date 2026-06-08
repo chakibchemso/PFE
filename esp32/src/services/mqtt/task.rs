@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::num::NonZeroU16;
 use defmt::{error, info, trace, warn};
@@ -37,14 +38,18 @@ pub async fn mqtt_task(
     mqtt_status.send(false);
     let mut backoff_ms = BACKOFF_INITIAL_MS;
 
+    // Allocate buffers on the heap (PSRAM via esp_alloc) instead of on the
+    // embassy task stack, eliminating ~10 KB of stack pressure.
+    let rx_buffer = Box::leak(Box::new([0u8; 1024]));
+    let tx_buffer = Box::leak(Box::new([0u8; 1024]));
+    let bump_storage = Box::leak(Box::new([0u8; BUFFER_CAPACITY]));
+
     loop {
         // Wait until the network stack has an IP address (non-blocking at startup)
         stack.wait_config_up().await;
 
         // 1. Setup TCP Socket
-        let mut rx_buffer = [0; 1024];
-        let mut tx_buffer = [0; 1024];
-        let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+        let mut socket = TcpSocket::new(stack, &mut rx_buffer[..], &mut tx_buffer[..]);
 
         // 2. Resolve broker hostname
         let broker_ip = match stack.dns_query(config::MQTT_HOST, DnsQueryType::A).await {
@@ -83,9 +88,8 @@ pub async fn mqtt_task(
 
         info!("TCP Connected!");
 
-        // 3. Create MQTT Client with BumpBuffer
-        let mut buffer_storage = [0u8; BUFFER_CAPACITY];
-        let mut buffer = BumpBuffer::new(&mut buffer_storage);
+        // 3. Create MQTT Client with BumpBuffer (reuses the pre-allocated heap storage)
+        let mut buffer = BumpBuffer::new(&mut bump_storage[..]);
         let mut client = Client::<
             _,
             _,
