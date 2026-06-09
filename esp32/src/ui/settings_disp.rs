@@ -6,7 +6,8 @@ use lv_bevy_ecs::functions::lv_color_hex;
 use lv_bevy_ecs::sys::*;
 use lv_bevy_ecs::widgets::{Button, Label};
 
-use super::keyboard::{lock_tileview, unlock_tileview};
+use super::geom::scale;
+use super::settings_kb::{lock_tileview, unlock_tileview};
 use super::theme::{CURRENT_BRIGHTNESS, CURRENT_THEME, ThemePalette, current_palette};
 use crate::services::rendering::task::BRIGHTNESS_CHANNEL;
 use crate::services::ui::task::PENDING_SAVES;
@@ -70,28 +71,28 @@ pub fn re_theme() {
 const MODAL_RADIUS: i32 = 0;
 
 // ── Title label ──────────────────────────────────────────────────────
-const TITLE_Y: i32 = 8;
+const TITLE_Y: i32 = scale(8);
 
 // ── Theme row ────────────────────────────────────────────────────────
-const THEME_LBL_X: i32 = 60;
-const THEME_LBL_Y: i32 = 80;
-const SW_X: i32 = 300;
-const SW_Y: i32 = 75;
+const THEME_LBL_X: i32 = scale(60);
+const THEME_LBL_Y: i32 = scale(80);
+const SW_X: i32 = scale(300);
+const SW_Y: i32 = scale(75);
 
 // ── Brightness row ───────────────────────────────────────────────────
 const BRIGHT_LBL_X: i32 = THEME_LBL_X;
-const BRIGHT_LBL_Y: i32 = 130;
-const SL_X: i32 = 60;
-const SL_Y: i32 = 170;
-const SL_W: i32 = 290;
-const SL_H: i32 = 24;
+const BRIGHT_LBL_Y: i32 = scale(130);
+const SL_X: i32 = scale(60);
+const SL_Y: i32 = scale(170);
+const SL_W: i32 = scale(290);
+const SL_H: i32 = scale(24);
 
 // ── Save / Close buttons ─────────────────────────────────────────────
-const BTN_W: i32 = 140;
-const BTN_H: i32 = 36;
-const BTN_Y: i32 = 320;
-const BTN_X: i32 = 140;
-const CLOSE_BTN_Y: i32 = BTN_Y + BTN_H + 10;
+const BTN_W: i32 = scale(140);
+const BTN_H: i32 = scale(40);
+const BTN_Y: i32 = scale(320);
+const BTN_X: i32 = scale(145);
+const CLOSE_BTN_Y: i32 = BTN_Y + BTN_H + scale(10);
 
 unsafe extern "C" fn panel_cb(e: *mut lv_event_t) {
     unsafe {
@@ -149,18 +150,20 @@ unsafe extern "C" fn bright_slider_cb(e: *mut lv_event_t) {
 
 pub fn display_settings_overlay(parent: *mut lv_obj_t) {
     let pal = current_palette();
-    let pw = unsafe { lv_obj_get_width(parent) };
-    let ph = unsafe { lv_obj_get_height(parent) };
+    let screen = unsafe { lv_screen_active() };
+    let pw = unsafe { lv_obj_get_width(screen) };
+    let ph = unsafe { lv_obj_get_height(screen) };
 
     // Lock tileview scrolling
     unsafe { lock_tileview() }
 
-    // ── Fullscreen modal panel (no backdrop) ─────────────────────────
-    let panel = unsafe { lv_obj_create(parent) };
+    // ── Fullscreen modal panel (on active screen) ────────────────────
+    let panel = unsafe { lv_obj_create(screen) };
     unsafe {
         lv_obj_set_size(panel, pw, ph);
         lv_obj_set_pos(panel, 0, 0);
         lv_obj_remove_flag(panel, lv_obj_flag_t_LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_border_side(panel, lv_border_side_t_LV_BORDER_SIDE_NONE, 0);
         lv_obj_set_style_radius(panel, MODAL_RADIUS, 0);
         lv_obj_add_event_cb(
             panel,
@@ -191,6 +194,7 @@ pub fn display_settings_overlay(parent: *mut lv_obj_t) {
     let sw = unsafe { lv_switch_create(panel) };
     unsafe {
         lv_obj_set_pos(sw, SW_X, SW_Y);
+        // lv_obj_set_size(sw, 40, 20);
     }
     if CURRENT_THEME.load(Ordering::Relaxed) == 1 {
         unsafe { lv_obj_add_state(sw, lv_state_t_LV_STATE_CHECKED) };

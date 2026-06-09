@@ -33,8 +33,9 @@ getrandom::register_custom_getrandom!(utils::custom_getrandom);
 
 // ── Core 1 statics ────────────────────────────────────────────────────────
 
-/// Stack for core 1's scheduler + embassy executor.
-static CORE1_STACK: StaticCell<Stack<32768>> = StaticCell::new();
+/// Stack size for core 1's scheduler + embassy executor (12 KB).
+const CORE1_STACK_SIZE: usize = 12 * 1024;
+static CORE1_STACK: StaticCell<Stack<CORE1_STACK_SIZE>> = StaticCell::new();
 
 /// Thread-mode executor for core 1 (LVGL render loop + touch).
 static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();

@@ -5,7 +5,7 @@ use lv_bevy_ecs::widgets::Tileview;
 
 use super::theme::{self, current_palette};
 use super::{
-    display_settings, ecg, gmt, gps, keyboard, power_settings, settings, vitals, watchface,
+    ecg, gps, settings, settings_disp, settings_gmt, settings_kb, settings_pwr, vitals, watchface,
 };
 
 /// Aggregated handles for all UI widgets that need runtime updates.
@@ -19,7 +19,7 @@ pub struct AppHandles {
 pub fn create_tileview() -> AppHandles {
     let mut tv = Tileview::new();
     let tv_raw = tv.raw_mut();
-    keyboard::set_tileview_handle(tv_raw);
+    settings_kb::set_tileview_handle(tv_raw);
 
     // Pane 0: Settings
     let mut p0 = tv
@@ -87,9 +87,9 @@ pub fn apply_theme(h: &AppHandles) {
     }
     watchface::apply_theme(&h.watchface, pal);
     vitals::apply_theme(&h.vitals, pal);
-    keyboard::re_theme();
-    gmt::re_theme();
-    display_settings::re_theme();
-    power_settings::re_theme();
+    settings_kb::re_theme();
+    settings_gmt::re_theme();
+    settings_disp::re_theme();
+    settings_pwr::re_theme();
     settings::re_theme();
 }

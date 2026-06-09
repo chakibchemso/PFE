@@ -7,11 +7,13 @@ use lv_bevy_ecs::support::Align;
 use lv_bevy_ecs::sys::*;
 use lv_bevy_ecs::widgets::{Button, Label, Wdg};
 
-use super::display_settings::display_settings_overlay;
-use super::gmt::{LAST_GMT_OFFSET, gmt_overlay};
-use super::keyboard::keyboard_overlay;
-use super::power_settings::power_settings_overlay;
+use super::geom::scale;
+use super::settings_disp::display_settings_overlay;
+use super::settings_gmt::{LAST_GMT_OFFSET, gmt_overlay};
+use super::settings_kb::keyboard_overlay;
+use super::settings_pwr::power_settings_overlay;
 use super::theme::current_palette;
+use crate::services::rendering::task::{SCREEN_H, SCREEN_W};
 
 struct SettingsHandles {
     labels: [*mut lv_obj_t; 6],
@@ -49,19 +51,19 @@ pub fn re_theme() {
 }
 
 pub fn create(parent: &mut Wdg) {
-    let pw = crate::ui::config::PRODUCTION_UI_SIZE as i32;
-    let ph = crate::ui::config::PRODUCTION_UI_SIZE as i32;
+    let pw = SCREEN_W;
+    let ph = SCREEN_H;
     let parent_raw = parent.raw_mut();
 
     // ── Title (fixed, outside scroll container) ──────────────────────────
     let mut lbl = Label::new();
     lbl.set_text(cstr!("Settings"));
-    align_to(&mut lbl, parent, Align::TopMid, 0, 25);
+    align_to(&mut lbl, parent, Align::TopMid, 0, scale(25));
     lbl.set_parent(parent);
     let _ = lbl.leak();
 
-    let container_top = 55;
-    let container_btm = 55;
+    let container_top = scale(55);
+    let container_btm = scale(55);
     let container_h = ph - container_top - container_btm;
 
     // ── Scrollable container below title ─────────────────────────────────
@@ -83,8 +85,8 @@ pub fn create(parent: &mut Wdg) {
     }
 
     // ── Config rows ──────────────────────────────────────────────────────
-    let mut row_y = 30;
-    let row_h = 50;
+    let mut row_y = scale(30);
+    let row_h = scale(50);
     let text_color = current_palette().alt_text;
 
     // Collect label handles for re-theming
@@ -94,10 +96,10 @@ pub fn create(parent: &mut Wdg) {
     macro_rules! config_row {
         ($label:expr) => {{
             let mut row = Button::new();
-            row.set_size(pw - 100, row_h);
+            row.set_size(pw - scale(100), row_h);
             unsafe {
                 lv_obj_set_parent(row.raw_mut(), container);
-                lv_obj_set_pos(row.raw_mut(), 50, row_y);
+                lv_obj_set_pos(row.raw_mut(), scale(50), row_y);
                 lv_obj_set_style_radius(row.raw_mut(), LV_RADIUS_CIRCLE as i32, 0);
             }
             let mut rl = Label::new();
@@ -112,7 +114,7 @@ pub fn create(parent: &mut Wdg) {
             let _ = rl.leak();
             let row_raw = row.raw_mut();
             let _ = row.leak();
-            row_y += row_h + 5;
+            row_y += row_h + scale(5);
             row_raw
         }};
     }
@@ -188,7 +190,7 @@ pub fn create(parent: &mut Wdg) {
         let spacer = unsafe { lv_obj_create(container) };
         unsafe {
             lv_obj_set_pos(spacer, 0, row_y);
-            lv_obj_set_size(spacer, 1, 300);
+            lv_obj_set_size(spacer, 1, scale(300));
             lv_obj_set_style_bg_opa(spacer, 0, 0);
             lv_obj_set_style_border_width(spacer, 0, 0);
             lv_obj_remove_flag(spacer, lv_obj_flag_t_LV_OBJ_FLAG_CLICKABLE);
@@ -197,7 +199,7 @@ pub fn create(parent: &mut Wdg) {
     }
 
     // ── Fade overlays (top & bottom) using stepped transparency ──────────
-    let fade_h = 4;
+    let fade_h = scale(4);
     let fade_steps = 5;
     let fade_opa_step = 40;
     let bg = current_palette().bg_color;
@@ -291,7 +293,7 @@ unsafe extern "C" fn ascon_click_cb(e: *mut lv_event_t) {
         let parent = lv_event_get_user_data(e) as *mut lv_obj_t;
         keyboard_overlay(
             parent,
-            cstr!("Crypto Key (16 chars)"),
+            cstr!("Crypto Key"),
             "",
             cstr!("16 ASCII chars"),
             true,

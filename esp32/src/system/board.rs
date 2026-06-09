@@ -105,8 +105,8 @@ pub fn init_board(
     // WiFi hardware DMA cannot address PSRAM — its buffers MUST land in
     // internal SRAM. Reserve a DRAM pool just large enough for WiFi.
     {
-        esp_alloc::heap_allocator!(size: 64 * 1024);
-        esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
+        esp_alloc::heap_allocator!(size: 32 * 1024);
+        esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744); // 73744
         let psram_config = PsramConfig {
             mode: PsramMode::OctalSpi,
             size: PsramSize::AutoDetect,

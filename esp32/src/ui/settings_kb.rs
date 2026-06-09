@@ -7,6 +7,7 @@ use lv_bevy_ecs::functions::lv_color_hex;
 use lv_bevy_ecs::sys::*;
 use lv_bevy_ecs::widgets::{Button, Label};
 
+use super::geom::scale;
 use super::theme::{ThemePalette, current_palette};
 use crate::services::ui::task::PENDING_SAVES;
 use crate::services::ui::task::PendingSave;
@@ -71,30 +72,30 @@ pub fn re_theme() {
 const MODAL_RADIUS: i32 = 0;
 
 // ── Title label ───────────────────────────────────────────────────────────
-const TITLE_Y: i32 = 8;
+const TITLE_Y: i32 = scale(4);
 
 // ── Text entry field ──────────────────────────────────────────────────────
-const TA_X: i32 = 95;
-const TA_Y: i32 = 40;
-const TA_W: i32 = 240;
-const TA_H: i32 = 40;
+const TA_X: i32 = scale(95);
+const TA_Y: i32 = scale(35);
+const TA_W: i32 = scale(240);
+const TA_H: i32 = scale(40);
 
 // ── Keyboard ──────────────────────────────────────────────────────────────
-const KB_X: i32 = 0;
-const KB_Y: i32 = -90;
-const KB_W: i32 = 440;
-const KB_H: i32 = 240;
+const KB_X: i32 = scale(0);
+const KB_Y: i32 = scale(-90);
+const KB_W: i32 = scale(440);
+const KB_H: i32 = scale(240);
 
 // ── Save button ───────────────────────────────────────────────────────────
-const BTN_W: i32 = 140;
-const BTN_H: i32 = 36;
-const BTN_Y: i32 = 345;
-const BTN_X: i32 = 140;
+const BTN_W: i32 = scale(140);
+const BTN_H: i32 = scale(40);
+const BTN_Y: i32 = scale(350);
+const BTN_X: i32 = scale(145);
 
 // ── Close button (below save) ────────────────────────────────────────────
 const CLOSE_BTN_W: i32 = BTN_W;
 const CLOSE_BTN_H: i32 = BTN_H;
-const CLOSE_BTN_Y: i32 = BTN_Y + BTN_H + 10;
+const CLOSE_BTN_Y: i32 = BTN_Y + BTN_H + scale(5);
 const CLOSE_BTN_X: i32 = BTN_X;
 
 struct ReadyData {
@@ -130,8 +131,9 @@ pub fn keyboard_overlay(
     save_key: &'static str,
 ) {
     let pal = current_palette();
-    let pw = unsafe { lv_obj_get_width(parent) };
-    let ph = unsafe { lv_obj_get_height(parent) };
+    let screen = unsafe { lv_screen_active() };
+    let pw = unsafe { lv_obj_get_width(screen) };
+    let ph = unsafe { lv_obj_get_height(screen) };
 
     // Lock tileview scrolling
     unsafe {
@@ -141,12 +143,13 @@ pub fn keyboard_overlay(
         }
     }
 
-    // ── Fullscreen modal panel (no backdrop) ─────────────────────────────
-    let panel = unsafe { lv_obj_create(parent) };
+    // ── Fullscreen modal panel (on active screen, not inside parent tile) ─
+    let panel = unsafe { lv_obj_create(screen) };
     unsafe {
         lv_obj_set_size(panel, pw, ph);
         lv_obj_set_pos(panel, 0, 0);
         lv_obj_remove_flag(panel, lv_obj_flag_t_LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_border_side(panel, lv_border_side_t_LV_BORDER_SIDE_NONE, 0);
         lv_obj_set_style_radius(panel, MODAL_RADIUS, 0);
         lv_obj_add_event_cb(
             panel,
@@ -194,7 +197,7 @@ pub fn keyboard_overlay(
         lv_obj_set_pos(_kb, KB_X, KB_Y);
         lv_obj_set_size(_kb, KB_W, KB_H);
         lv_keyboard_set_textarea(_kb, ta);
-        lv_obj_set_style_radius(_kb, 4, 0);
+        lv_obj_set_style_radius(_kb, scale(4), 0);
         lv_keyboard_set_popovers(_kb, true);
     }
 

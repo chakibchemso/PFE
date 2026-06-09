@@ -1,12 +1,13 @@
 pub mod config;
-pub mod display_settings;
 pub mod ecg;
-pub mod gmt;
+pub mod geom;
 pub mod gps;
-pub mod keyboard;
 pub mod layout;
-pub mod power_settings;
 pub mod settings;
+pub mod settings_disp;
+pub mod settings_gmt;
+pub mod settings_kb;
+pub mod settings_pwr;
 pub mod theme;
 pub mod vitals;
 pub mod watchface;

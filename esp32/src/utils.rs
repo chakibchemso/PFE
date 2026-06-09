@@ -1,6 +1,10 @@
 use alloc::string::String;
+use core::cell::RefCell;
 use core::fmt::Write;
 use defmt::info;
+use embassy_sync::blocking_mutex::Mutex;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_time::Instant;
 use embedded_graphics::{
     pixelcolor::{Rgb565, Rgb888},
     prelude::DrawTarget,
@@ -25,6 +29,179 @@ macro_rules! mk_static {
 /// cores. This wrapper is the single `unsafe` bridge for cross-core moves.
 pub struct SendWrap<T>(pub T);
 unsafe impl<T> Send for SendWrap<T> {}
+
+/// Named wall-clock performance counter.
+///
+/// Thread-safe, fixed capacity `N` (const generic — statically allocated).
+/// Each name lives in two internal arrays: one pending start (`u64` μs) and
+/// one completed elapsed value (`u32` μs).
+///
+/// # Usage
+/// ```ignore
+/// static PERF: PerfCounter<8> = PerfCounter::new();
+///
+/// PERF.start("render", Instant::now());
+/// //  … work …
+/// PERF.stop("render", Instant::now());
+///
+/// defmt::info!("render took {} μs", PERF.get("render"));
+///
+/// // Total wall-clock since start:
+/// let total = PERF.since_start("frame", Instant::now());
+/// ```
+pub struct PerfCounter<const N: usize> {
+    inner: Mutex<CriticalSectionRawMutex, RefCell<PerfInner<N>>>,
+}
+
+struct PerfInner<const N: usize> {
+    starts: [Option<(&'static str, u64)>; N],
+    values: [Option<(&'static str, u32)>; N],
+}
+
+impl<const N: usize> PerfInner<N> {
+    const fn new() -> Self {
+        Self {
+            starts: [None; N],
+            values: [None; N],
+        }
+    }
+}
+
+impl<const N: usize> PerfCounter<N> {
+    pub const fn new() -> Self {
+        Self {
+            inner: Mutex::new(RefCell::new(PerfInner::new())),
+        }
+    }
+
+    /// Record the start instant of a named measurement.
+    /// Overwrites a previous start with the same name; otherwise takes
+    /// the first free slot.  Silently drops if all slots are occupied.
+    pub fn start(&self, name: &'static str, instant: Instant) {
+        let micros = instant.as_micros();
+        self.inner.lock(|inner| {
+            let inner = &mut *inner.borrow_mut();
+            for slot in inner.starts.iter_mut() {
+                if let Some((n, _)) = slot {
+                    if *n == name {
+                        *slot = Some((name, micros));
+                        return;
+                    }
+                }
+            }
+            for slot in inner.starts.iter_mut() {
+                if slot.is_none() {
+                    *slot = Some((name, micros));
+                    return;
+                }
+            }
+        });
+    }
+
+    /// Stop a named measurement and store the elapsed μs.
+    /// The elapsed value can be read with [`get`](Self::get).
+    /// If no matching start exists this is a no-op.
+    pub fn stop(&self, name: &'static str, instant: Instant) {
+        let micros = instant.as_micros();
+        self.inner.lock(|inner| {
+            let inner = &mut *inner.borrow_mut();
+            let start = inner.starts.iter_mut().find_map(|slot| {
+                if let Some((n, s)) = slot {
+                    if *n == name {
+                        let s = *s;
+                        *slot = None;
+                        Some(s)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            });
+            let Some(start) = start else { return };
+
+            let elapsed = micros.wrapping_sub(start) as u32;
+            for slot in inner.values.iter_mut() {
+                if let Some((n, _)) = slot {
+                    if *n == name {
+                        *slot = Some((name, elapsed));
+                        return;
+                    }
+                }
+            }
+            for slot in inner.values.iter_mut() {
+                if slot.is_none() {
+                    *slot = Some((name, elapsed));
+                    return;
+                }
+            }
+        });
+    }
+
+    /// Directly store a named `u32` value (e.g. a frame counter).
+    pub fn set(&self, name: &'static str, value: u32) {
+        self.inner.lock(|inner| {
+            let inner = &mut *inner.borrow_mut();
+            for slot in inner.values.iter_mut() {
+                if let Some((n, _)) = slot {
+                    if *n == name {
+                        *slot = Some((name, value));
+                        return;
+                    }
+                }
+            }
+            for slot in inner.values.iter_mut() {
+                if slot.is_none() {
+                    *slot = Some((name, value));
+                    return;
+                }
+            }
+        });
+    }
+
+    /// Read a stored elapsed or stamped value by name.
+    /// Returns 0 when the name was never stored.
+    pub fn get(&self, name: &'static str) -> u32 {
+        self.inner.lock(|inner| {
+            let inner = inner.borrow();
+            inner
+                .values
+                .iter()
+                .find_map(|slot| {
+                    if let Some((n, v)) = slot {
+                        if *n == name { Some(*v) } else { None }
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0)
+        })
+    }
+
+    /// μs since the last [`start`](Self::start) for `name`.
+    /// Useful for total wall-clock time of an ongoing measurement.
+    pub fn since_start(&self, name: &'static str, now: Instant) -> u32 {
+        let now = now.as_micros();
+        self.inner.lock(|inner| {
+            let inner = inner.borrow();
+            inner
+                .starts
+                .iter()
+                .find_map(|slot| {
+                    if let Some((n, s)) = slot {
+                        if *n == name {
+                            Some(now.wrapping_sub(*s) as u32)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0)
+        })
+    }
+}
 
 pub fn custom_getrandom(buf: &mut [u8]) -> Result<(), getrandom::Error> {
     Rng::new().read(buf);

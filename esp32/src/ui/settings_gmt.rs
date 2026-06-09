@@ -6,7 +6,8 @@ use lv_bevy_ecs::functions::lv_color_hex;
 use lv_bevy_ecs::sys::*;
 use lv_bevy_ecs::widgets::{Button, Label};
 
-use super::keyboard::{lock_tileview, unlock_tileview};
+use super::geom::scale;
+use super::settings_kb::{lock_tileview, unlock_tileview};
 use super::theme::{ThemePalette, current_palette};
 use crate::services::ui::task::PENDING_SAVES;
 use crate::services::ui::task::PendingSave;
@@ -64,21 +65,21 @@ pub fn re_theme() {
 const MODAL_RADIUS: i32 = 0;
 
 // ── Title label ──────────────────────────────────────────────────────
-const TITLE_Y: i32 = 10;
+const TITLE_Y: i32 = scale(10);
 
 // ── Step buttons (− / +) ─────────────────────────────────────────────
-const STEP_BTN_SIZE: i32 = 64;
-const STEP_BTN_X_OFF: i32 = 120;
+const STEP_BTN_SIZE: i32 = scale(64);
+const STEP_BTN_X_OFF: i32 = scale(120);
 
 // ── Save / Close buttons ─────────────────────────────────────────────
-const BTN_W: i32 = 140;
-const BTN_H: i32 = 36;
-const BTN_Y: i32 = 320;
-const BTN_X: i32 = 140;
-const CLOSE_BTN_Y: i32 = BTN_Y + BTN_H + 10;
+const BTN_W: i32 = scale(140);
+const BTN_H: i32 = scale(40);
+const BTN_Y: i32 = scale(320);
+const BTN_X: i32 = scale(145);
+const CLOSE_BTN_Y: i32 = BTN_Y + BTN_H + scale(10);
 
 // ── Value label Y offset from center ─────────────────────────────────
-const VAL_Y_OFF: i32 = 0;
+const VAL_Y_OFF: i32 = scale(0);
 
 const GMT_MIN: i8 = -12;
 const GMT_MAX: i8 = 14;
@@ -165,18 +166,20 @@ unsafe extern "C" fn gmt_save_cb(e: *mut lv_event_t) {
 
 pub fn gmt_overlay(parent: *mut lv_obj_t, initial_offset: i8) {
     let pal = current_palette();
-    let pw = unsafe { lv_obj_get_width(parent) };
-    let ph = unsafe { lv_obj_get_height(parent) };
+    let screen = unsafe { lv_screen_active() };
+    let pw = unsafe { lv_obj_get_width(screen) };
+    let ph = unsafe { lv_obj_get_height(screen) };
 
     // Lock tileview scrolling
     unsafe { lock_tileview() }
 
-    // ── Fullscreen modal panel (no backdrop) ─────────────────────────
-    let panel = unsafe { lv_obj_create(parent) };
+    // ── Fullscreen modal panel (on active screen) ────────────────────
+    let panel = unsafe { lv_obj_create(screen) };
     unsafe {
         lv_obj_set_size(panel, pw, ph);
         lv_obj_set_pos(panel, 0, 0);
         lv_obj_remove_flag(panel, lv_obj_flag_t_LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_border_side(panel, lv_border_side_t_LV_BORDER_SIDE_NONE, 0);
         lv_obj_set_style_radius(panel, MODAL_RADIUS, 0);
         lv_obj_add_event_cb(
             panel,

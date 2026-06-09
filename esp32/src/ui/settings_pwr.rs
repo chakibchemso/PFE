@@ -6,7 +6,8 @@ use lv_bevy_ecs::functions::lv_color_hex;
 use lv_bevy_ecs::sys::*;
 use lv_bevy_ecs::widgets::{Button, Label};
 
-use super::keyboard::{lock_tileview, unlock_tileview};
+use super::geom::scale;
+use super::settings_kb::{lock_tileview, unlock_tileview};
 use super::theme::{ThemePalette, current_palette};
 use crate::services::power::SHUTDOWN_CHANNEL;
 
@@ -44,11 +45,11 @@ pub fn re_theme() {
     }
 }
 
-const TITLE_Y: i32 = 8;
-const BTN_W: i32 = 200;
-const BTN_H: i32 = 44;
-const SHUTDOWN_BTN_Y: i32 = 0;
-const CLOSE_BTN_Y: i32 = SHUTDOWN_BTN_Y + BTN_H + 14;
+const TITLE_Y: i32 = scale(8);
+const BTN_W: i32 = scale(200);
+const BTN_H: i32 = scale(44);
+const SHUTDOWN_BTN_Y: i32 = scale(0);
+const CLOSE_BTN_Y: i32 = SHUTDOWN_BTN_Y + BTN_H + scale(14);
 
 unsafe extern "C" fn panel_cb(e: *mut lv_event_t) {
     unsafe {
@@ -71,17 +72,19 @@ unsafe extern "C" fn shutdown_click_cb(_e: *mut lv_event_t) {
 
 pub fn power_settings_overlay(parent: *mut lv_obj_t) {
     let pal = current_palette();
-    let pw = unsafe { lv_obj_get_width(parent) };
-    let ph = unsafe { lv_obj_get_height(parent) };
+    let screen = unsafe { lv_screen_active() };
+    let pw = unsafe { lv_obj_get_width(screen) };
+    let ph = unsafe { lv_obj_get_height(screen) };
 
     unsafe { lock_tileview() }
 
-    // Fullscreen modal panel
-    let panel = unsafe { lv_obj_create(parent) };
+    // Fullscreen modal panel (on active screen)
+    let panel = unsafe { lv_obj_create(screen) };
     unsafe {
         lv_obj_set_size(panel, pw, ph);
         lv_obj_set_pos(panel, 0, 0);
         lv_obj_remove_flag(panel, lv_obj_flag_t_LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_border_side(panel, lv_border_side_t_LV_BORDER_SIDE_NONE, 0);
         lv_obj_set_style_radius(panel, 0, 0);
         lv_obj_add_event_cb(
             panel,
@@ -105,7 +108,12 @@ pub fn power_settings_overlay(parent: *mut lv_obj_t) {
     warn_lbl.set_text(cstr!("Shut down the watch?"));
     unsafe {
         lv_obj_set_parent(warn_lbl.raw_mut(), panel);
-        lv_obj_align(warn_lbl.raw_mut(), lv_align_t_LV_ALIGN_CENTER, 0, -60);
+        lv_obj_align(
+            warn_lbl.raw_mut(),
+            lv_align_t_LV_ALIGN_CENTER,
+            0,
+            scale(-60),
+        );
     }
     let _ = warn_lbl.leak();
 

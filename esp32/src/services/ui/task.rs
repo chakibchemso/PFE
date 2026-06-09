@@ -33,13 +33,13 @@ use crate::app::bus::BatteryState;
 use crate::drivers::oxymeter::WAVEFORM_CHANNEL;
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{
-    BRIGHTNESS_CHANNEL, DISPLAY_READY, flush_task, init_lvgl_display,
+    BRIGHTNESS_CHANNEL, DISPLAY_READY, flush_task, init_lvgl_display, log_perf, mark_frame_start,
 };
 use crate::services::storage::StorageService;
 use crate::services::storage::StoredConfig;
 use crate::services::touch;
-use crate::ui::gmt::LAST_GMT_OFFSET;
 use crate::ui::layout::{self, apply_theme};
+use crate::ui::settings_gmt::LAST_GMT_OFFSET;
 use crate::ui::theme::CURRENT_BRIGHTNESS;
 use crate::ui::theme::CURRENT_THEME;
 
@@ -215,9 +215,11 @@ pub async fn render_task(
         }
 
         trace!("R: before lv_timer_handler");
+        mark_frame_start();
         // Drive LVGL timers (refresh, animations, indev reads)
         let period = lv_timer_handler();
         trace!("R: after lv_timer_handler");
+        log_perf();
 
         // Check theme toggle
         let current = CURRENT_THEME.load(Ordering::Relaxed);

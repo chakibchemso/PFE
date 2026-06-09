@@ -1,26 +1,25 @@
 use lv_bevy_ecs::functions::lv_color_hex;
 use lv_bevy_ecs::sys::*;
 
+use super::geom::{CX, scale};
 use super::theme::{ThemePalette, current_palette};
-use crate::services::rendering::task::SCREEN_W;
 
 // ── Layout constants ─────────────────────────────────────────────────────
 
-const CX: i32 = SCREEN_W / 2;
-const TITLE_Y: i32 = 30;
-const LABEL_W: i32 = 200;
+const TITLE_Y: i32 = scale(30);
+const LABEL_W: i32 = scale(200);
 const LABEL_HALF: i32 = LABEL_W / 2;
-const BAR_W: i32 = 280;
-const BAR_H: i32 = 16;
+const BAR_W: i32 = scale(280);
+const BAR_H: i32 = scale(16);
 const BAR_HALF: i32 = BAR_W / 2;
 
-const BPM_LBL_Y: i32 = 80;
-const BPM_BAR_Y: i32 = 110;
-const SPO2_LBL_Y: i32 = 150;
-const SPO2_BAR_Y: i32 = 180;
-const TEMP_LBL_Y: i32 = 220;
-const CHART_Y: i32 = 250;
-const CHART_H: i32 = 130;
+const BPM_LBL_Y: i32 = scale(80);
+const BPM_BAR_Y: i32 = scale(110);
+const SPO2_LBL_Y: i32 = scale(150);
+const SPO2_BAR_Y: i32 = scale(180);
+const TEMP_LBL_Y: i32 = scale(220);
+const CHART_Y: i32 = scale(250);
+const CHART_H: i32 = scale(130);
 
 pub struct Handles {
     pub title: *mut lv_obj_t,
