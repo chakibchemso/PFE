@@ -3,9 +3,9 @@
 
 use alloc::vec::Vec;
 use core::ffi::CStr;
-use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicU8, Ordering};
 
-use defmt::trace;
+use defmt::{error, trace};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
@@ -30,7 +30,7 @@ pub struct PendingSave {
 pub static PENDING_SAVES: Channel<CriticalSectionRawMutex, PendingSave, 8> = Channel::new();
 
 use crate::app::bus::BatteryState;
-use crate::drivers::oxymeter::WAVEFORM_CHANNEL;
+use crate::drivers::oxymeter::{SAMPLE_BUFFER, WAVEFORM_CHANNEL};
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{
     BRIGHTNESS_CHANNEL, DISPLAY_READY, flush_task, init_lvgl_display, log_perf, mark_frame_start,
@@ -351,6 +351,31 @@ pub async fn render_task(
             }
         }
 
+        // Bridge SAMPLE_BUFFER → WAVEFORM_CHANNEL at a paced rate
+        // tied to the render frame cadence. Drain half (rounded up) of what's
+        // available each frame so the PPG graph updates smoothly instead of
+        // jumping by 30 samples every ~300ms.
+        //
+        // Also decimate by 4: with 100Hz acquisition and 50 chart points,
+        // forwarding every 4th sample gives 25Hz → 50 points = 2s window.
+        static PPG_DECIMATE: AtomicU8 = AtomicU8::new(0);
+
+        let available = SAMPLE_BUFFER.len();
+        if available > 0 {
+            let to_pull = core::cmp::max(1, (available + 1) / 2);
+            for _ in 0..to_pull {
+                if let Ok((red, ir)) = SAMPLE_BUFFER.try_receive() {
+                    let div = PPG_DECIMATE.load(Ordering::Relaxed);
+                    PPG_DECIMATE.store((div + 1) % 4, Ordering::Relaxed);
+                    if div == 0 {
+                        let _ = WAVEFORM_CHANNEL.try_send((red, ir));
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
         // Drain waveform samples into PPG chart
         while let Ok((red, ir)) = WAVEFORM_CHANNEL.try_receive() {
             unsafe {
@@ -449,15 +474,16 @@ pub async fn render_task(
         match period {
             NextTimerPeriod::Ready => {
                 // At least one timer is ready — don't sleep, just yield
-                Timer::after(Duration::from_millis(5)).await;
+                Timer::after_millis(0).await;
             }
             NextTimerPeriod::AfterMs(ms) => {
                 let elapsed = start.elapsed().as_millis() as u32;
-                let sleep_ms = ms.get().saturating_sub(elapsed).max(1);
-                Timer::after(Duration::from_millis(sleep_ms.into())).await;
+                let sleep_ms = ms.get().saturating_sub(elapsed).max(0);
+                Timer::after_millis(sleep_ms as u64).await;
             }
             NextTimerPeriod::Never => {
-                Timer::after(Duration::from_secs(1)).await;
+                error!("lvgl says: fuck you!");
+                Timer::after_secs(1).await;
             }
         }
     }

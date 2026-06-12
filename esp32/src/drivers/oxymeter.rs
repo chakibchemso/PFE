@@ -1,20 +1,23 @@
 use defmt::{info, trace};
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use embassy_sync::watch::Sender;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, watch::Sender};
 use embassy_time::{Duration, Instant, Timer};
-use max3010x_async::{AdcRange, SamplingRate};
 use max3010x_async::{
-    Led, LedPulseWidth, Max3010x, SampleAveraging,
+    AdcRange, Led, LedPulseWidth, Max3010x, SampleAveraging, SamplingRate,
     marker::{ic::Max30102, mode::Oximeter},
 };
 
 /// IR DC mean below this threshold indicates no finger on the sensor.
 const FINGER_DC_THRESHOLD: f32 = 500_000.0;
 
-/// Waveform samples (clean_red, clean_ir) sent per-sample from the oxymeter
-/// acquisition task and consumed by the UI render loop for the PPG chart.
+/// Intermediary sample buffer: the acquisition task pushes processed samples here
+/// in batches. The render task drains a fraction per frame into WAVEFORM_CHANNEL
+/// so the PPG chart updates smoothly regardless of the batch cadence.
+pub static SAMPLE_BUFFER: Channel<CriticalSectionRawMutex, (i16, i16), 256> = Channel::new();
+
+/// Waveform samples (clean_red, clean_ir) consumed by the UI render loop
+/// for the PPG chart. Filled from SAMPLE_BUFFER at a paced rate tied to
+/// the render frame time.
 pub static WAVEFORM_CHANNEL: Channel<CriticalSectionRawMutex, (i16, i16), 256> = Channel::new();
 
 use crate::drivers::bus::{BusError, I2cPeripheral};
@@ -61,8 +64,6 @@ pub struct OxymeterRunner {
     // Plotter for compact text output
     #[cfg(feature = "plot")]
     plot_msg: PlotMessage,
-    // #[cfg(feature = "plot")]
-    // samples_sent: u32,
 }
 
 impl OxymeterRunner {
@@ -70,18 +71,18 @@ impl OxymeterRunner {
         mut self,
         sender: Sender<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
     ) -> ! {
-        // Register all plot channels once at startup
         #[cfg(feature = "plot")]
         self.send_plot_registration();
 
         // Seed: assume finger is present until proven otherwise
         self.finger_present = true;
 
+        // Clear before starting the timer
+        self.sensor.clear_fifo().await.unwrap();
+
         loop {
-            if self.sensor.get_available_sample_count().await.unwrap_or(0) == 0 {
-                Timer::after(Duration::from_millis(10)).await;
-                continue;
-            }
+            // Batch collect samples, max = 10ms * 32
+            Timer::after_millis(300).await;
 
             let chrono = Instant::now().as_micros();
             let mut read_time = 0u64;
@@ -104,17 +105,15 @@ impl OxymeterRunner {
                         let raw_red = red as f32;
                         let raw_ir = ir as f32;
 
-                        // 1. Strip the DC offset (and save the mean for SpO2 math)
                         let (pre_dc_red, dc_mean_red) = self.dc_block_red.process(raw_red);
                         let (pre_dc_ir, dc_mean_ir) = self.dc_block_ir.process(raw_ir);
                         last_dc_ir = dc_mean_ir;
 
-                        // 2. Apply the FIR Bandpass
                         let clean_red = self.bandpass_red.process(pre_dc_red);
                         let clean_ir = self.bandpass_ir.process(pre_dc_ir);
 
-                        // 2b. Send waveform sample for the PPG chart
-                        let _ = WAVEFORM_CHANNEL.try_send((clean_red as i16, clean_ir as i16));
+                        // 2b. Buffer the processed sample for the PPG chart
+                        let _ = SAMPLE_BUFFER.try_send((clean_red as i16, clean_ir as i16));
 
                         // 3. Continuously calculate the current SpO2 percentage
                         let current_spo2 = self.spo2_calc.process_sample(
@@ -168,10 +167,6 @@ impl OxymeterRunner {
                 read_time,
                 elapsed - read_time
             );
-
-            // Yield to give lower-rate I2C clients (touch) a chance to
-            // acquire the shared bus before this high-rate loop polls again.
-            Timer::after(Duration::from_millis(2)).await;
         }
     }
 
@@ -248,9 +243,13 @@ impl OxymeterHandle {
             .set_sample_averaging(SampleAveraging::Sa4)
             .await
             .unwrap();
+
+        // Half Amp, Long pulse,
         sensor.set_pulse_amplitude(Led::All, 0x1F).await.unwrap();
         sensor.set_pulse_width(LedPulseWidth::Pw411).await.unwrap();
         sensor.set_adc_range(AdcRange::Fs4k).await.unwrap();
+
+        // Max is dumb, rollover must be enabled for some reason
         sensor.enable_fifo_rollover().await.unwrap();
         sensor.clear_fifo().await.unwrap();
 

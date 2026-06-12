@@ -57,8 +57,6 @@ pub async fn touch_task(
             Ok(Ok(Some((x, y)))) => {
                 info!("T: 1 {} {}", x, y);
                 if let Some((lx, ly)) = config.map_touch_to_viewport(x, y) {
-                    // LVGL runs at full 466×466 resolution, matching the physical
-                    // panel. Touch coordinates map 1:1 with the display.
                     TOUCH_X.store(lx, Ordering::Relaxed);
                     TOUCH_Y.store(ly, Ordering::Relaxed);
                     TOUCH_PRESSED.store(true, Ordering::Relaxed);

@@ -9,6 +9,7 @@
 //! No service imports another service's internals.
 
 pub mod gps;
+pub mod io_expander;
 pub mod mqtt;
 pub mod power;
 pub mod rendering;

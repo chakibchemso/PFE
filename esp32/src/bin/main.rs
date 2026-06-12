@@ -3,8 +3,7 @@
 
 use defmt::{info, trace};
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use esp_hal::{
     Async,
     dma::{DmaRxBuf, DmaTxBuf},
@@ -20,8 +19,10 @@ use esp32::{
     crypto,
     drivers::bus::{I2cBus, I2cPeripheral},
     mk_static,
-    services::storage::StoredConfig,
-    services::{self, storage::StorageService},
+    services::{
+        self,
+        storage::{StorageService, StoredConfig},
+    },
     system::{self, board::init_board, init_system},
     ui, utils,
 };

@@ -1,5 +1,5 @@
 //! Max30102-specific configuration methods.
-use crate::{marker, Error, Led, Max3010x, Register as Reg, TimeSlot, hal};
+use crate::{Error, Led, Max3010x, Register as Reg, TimeSlot, hal, marker};
 use core::marker::PhantomData;
 use hal::i2c;
 

@@ -405,7 +405,10 @@ where
     }
 
     async fn write_data(&mut self, data: &[u8]) -> Result<(), Error<E>> {
-        self.i2c.write(DEVICE_ADDRESS, data).await.map_err(Error::I2C)
+        self.i2c
+            .write(DEVICE_ADDRESS, data)
+            .await
+            .map_err(Error::I2C)
     }
 }
 

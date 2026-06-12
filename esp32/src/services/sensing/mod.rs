@@ -1,11 +1,11 @@
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::watch::Sender;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, watch::Sender};
 
-use crate::app::bus::SystemBus;
-use crate::crypto;
-use crate::drivers::bus::I2cPeripheral;
-use crate::drivers::die_temp::DieTempDriver;
+use crate::{
+    app::bus::SystemBus,
+    crypto,
+    drivers::{bus::I2cPeripheral, die_temp::DieTempDriver},
+};
 
 pub mod die_temp;
 pub mod driver;

@@ -1,7 +1,7 @@
 //! Common device configuration methods.
 use crate::{
-    marker, private, AdcRange, BitFlags as BF, Config, Error, FifoAlmostFullLevelInterrupt,
-    LedPulseWidth, Max3010x, Register as Reg, SampleAveraging, SamplingRate, hal
+    AdcRange, BitFlags as BF, Config, Error, FifoAlmostFullLevelInterrupt, LedPulseWidth, Max3010x,
+    Register as Reg, SampleAveraging, SamplingRate, hal, marker, private,
 };
 use hal::i2c;
 
@@ -85,7 +85,8 @@ where
             SampleAveraging::Sa16 => fifo_config.with_high(0b1000_0000),
             SampleAveraging::Sa32 => fifo_config.with_high(0b1010_0000),
         };
-        self.write_data(&[Reg::FIFO_CONFIG, fifo_config.bits]).await?;
+        self.write_data(&[Reg::FIFO_CONFIG, fifo_config.bits])
+            .await?;
         self.fifo_config = fifo_config;
         Ok(())
     }
@@ -128,7 +129,8 @@ where
             .fifo_config
             .with_low(0b0000_0111)
             .with_high(level.get_register_value());
-        self.write_data(&[Reg::FIFO_CONFIG, fifo_config.bits]).await?;
+        self.write_data(&[Reg::FIFO_CONFIG, fifo_config.bits])
+            .await?;
         self.fifo_config = fifo_config;
         Ok(())
     }
@@ -293,7 +295,8 @@ where
             Fs8k => new_config.with_high(BF::ADC_RGE1),
             Fs16k => new_config.with_high(BF::ADC_RGE0).with_high(BF::ADC_RGE1),
         };
-        self.write_data(&[Reg::SPO2_CONFIG, new_config.bits]).await?;
+        self.write_data(&[Reg::SPO2_CONFIG, new_config.bits])
+            .await?;
         self.spo2_config = new_config;
         Ok(())
     }
@@ -323,7 +326,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{check_red_ir, check_red_only, LedPulseWidth as LedPw, SamplingRate as SR};
+    use super::{LedPulseWidth as LedPw, SamplingRate as SR, check_red_ir, check_red_only};
 
     #[test]
     fn invalid_combinations_oximeter_sampling_rate_800_pulse_width_411() {

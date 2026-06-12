@@ -1588,6 +1588,7 @@ dependencies = [
  "serde",
  "smoltcp 0.12.0",
  "static_cell",
+ "tca9554",
 ]
 
 [[package]]
@@ -2862,6 +2863,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "tca9554"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0c233f69c4b1c180382c5ab6def624f8ac86468b443ca8af639183ca501659b"
+dependencies = [
+ "defmt 1.1.0",
+ "embedded-hal-async",
 ]
 
 [[package]]

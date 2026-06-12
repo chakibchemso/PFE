@@ -105,7 +105,7 @@ pub fn log_perf() {
         (0, 0)
     };
     if dfid == fid {
-        defmt::info!(
+        defmt::trace!(
             "PERF  lvgl={}μs  te_wait={}μs  dma={}μs  total={}μs  fid={}",
             lvgl,
             te_wait,
@@ -114,7 +114,7 @@ pub fn log_perf() {
             fid
         );
     } else {
-        defmt::info!(
+        defmt::trace!(
             "PERF  lvgl={}μs  dma=SKIP  total={}μs  fid={}",
             lvgl,
             total,

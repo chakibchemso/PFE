@@ -1,8 +1,8 @@
 //! Reading data method implementation.
 
 use crate::{
-    marker, private, BitFlags, Error, InterruptStatus, LedPulseWidth, Max3010x, Register,
-    SamplingRate, DEVICE_ADDRESS, hal
+    BitFlags, DEVICE_ADDRESS, Error, InterruptStatus, LedPulseWidth, Max3010x, Register,
+    SamplingRate, hal, marker, private,
 };
 use hal::i2c;
 
@@ -54,7 +54,11 @@ where
         Ok(sample_count as u8) // the maximum is 32 so this is ok
     }
 
-    async fn read_samples(&mut self, sample_count: usize, output: &mut [u32]) -> Result<(), Error<E>> {
+    async fn read_samples(
+        &mut self,
+        sample_count: usize,
+        output: &mut [u32],
+    ) -> Result<(), Error<E>> {
         const BYTES_PER_SAMPLE: usize = 3;
         const MAX_CHANNEL_COUNT: usize = 2; // for max30102
         const FIFO_SAMPLE_SIZE: usize = 32;
@@ -65,7 +69,8 @@ where
         // maximum size (could be optimized by using mode_channels but this
         // needs https://github.com/rust-lang/rust/issues/42863)
         let mut data = [0; FIFO_SAMPLE_SIZE * MAX_CHANNEL_COUNT * BYTES_PER_SAMPLE];
-        self.read_data(Register::FIFO_DATA, &mut data[..byte_count]).await?;
+        self.read_data(Register::FIFO_DATA, &mut data[..byte_count])
+            .await?;
         for (out_idx, out_item) in output
             .iter_mut()
             .enumerate()
@@ -156,14 +161,16 @@ where
     /// When the measurement is finished, returns the result.
     pub async fn read_temperature(&mut self) -> nb::Result<f32, Error<E>> {
         let config = self
-            .read_register(Register::TEMP_CONFIG).await
+            .read_register(Register::TEMP_CONFIG)
+            .await
             .map_err(nb::Error::Other)?;
         if config & BitFlags::TEMP_EN != 0 {
             return Err(nb::Error::WouldBlock);
         }
         if self.temperature_measurement_started {
             let mut data = [0, 0];
-            self.read_data(Register::TEMP_INT, &mut data).await
+            self.read_data(Register::TEMP_INT, &mut data)
+                .await
                 .map_err(nb::Error::Other)?;
             let temp_int = data[0] as i8;
             let temp_frac = f32::from(data[1]) * 0.0625;
@@ -171,7 +178,8 @@ where
             self.temperature_measurement_started = false;
             Ok(temp)
         } else {
-            self.write_data(&[Register::TEMP_CONFIG, BitFlags::TEMP_EN]).await
+            self.write_data(&[Register::TEMP_CONFIG, BitFlags::TEMP_EN])
+                .await
                 .map_err(nb::Error::Other)?;
             self.temperature_measurement_started = true;
             Err(nb::Error::WouldBlock)
@@ -210,14 +218,15 @@ where
 
     async fn read_data(&mut self, register: u8, data: &mut [u8]) -> Result<(), Error<E>> {
         self.i2c
-            .write_read(DEVICE_ADDRESS, &[register], data).await
+            .write_read(DEVICE_ADDRESS, &[register], data)
+            .await
             .map_err(Error::I2C)
     }
 }
 
 #[cfg(test)]
 mod convert_sampling_rate_tests {
-    use super::{convert_sampling_rate, SamplingRate};
+    use super::{SamplingRate, convert_sampling_rate};
     macro_rules! convert_sampling_rate_test {
         ($name:ident, $bits:expr, $rate:ident) => {
             #[test]

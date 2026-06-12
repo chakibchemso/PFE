@@ -137,6 +137,7 @@ static_cell = "2.1.1"
 libm = "0.2.16"
 nb = "1.1.0"
 max3010x-async = { version = "0.1.0", path = "../crates/max3010x-async" }
+tca9554 = { version = "0.1.1", features = ["defmt"] }
 
 # ! ### storage crates ###
 esp-storage = { version = "0.9", features = ["esp32s3"] }
