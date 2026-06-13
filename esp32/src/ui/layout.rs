@@ -13,6 +13,7 @@ pub struct AppHandles {
     pub panes: [*mut lv_obj_t; 5],
     pub watchface: watchface::Handles,
     pub vitals: vitals::Handles,
+    pub ecg: ecg::Handles,
 }
 
 /// Create the full tileview UI: 5 panes spanning a horizontal strip.
@@ -49,7 +50,7 @@ pub fn create_tileview() -> AppHandles {
     settings::create(&mut p0);
     let watchface_h = watchface::create(&mut p1);
     let vitals_h = vitals::create(&mut p2);
-    ecg::create(&mut p3);
+    let ecg_h = ecg::create(&mut p3);
     gps::create(&mut p4);
 
     // Save pane raw pointers for re-theming
@@ -76,6 +77,7 @@ pub fn create_tileview() -> AppHandles {
         panes,
         watchface: watchface_h,
         vitals: vitals_h,
+        ecg: ecg_h,
     }
 }
 
@@ -87,6 +89,7 @@ pub fn apply_theme(h: &AppHandles) {
     }
     watchface::apply_theme(&h.watchface, pal);
     vitals::apply_theme(&h.vitals, pal);
+    ecg::apply_theme(&h.ecg, pal);
     settings_kb::re_theme();
     settings_gmt::re_theme();
     settings_disp::re_theme();

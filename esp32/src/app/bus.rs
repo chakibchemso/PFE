@@ -46,6 +46,8 @@ impl GpsFix {
 pub struct SystemBus {
     /// Current vitals: (bpm: u8, spo2: u8, temp: u8)
     pub vitals: Watch<CriticalSectionRawMutex, (u8, u8, u8), 2>,
+    /// Current ECG heart rate (BPM)
+    pub ecg_hr: Watch<CriticalSectionRawMutex, (u8,), 2>,
     /// WiFi connectivity state
     pub wifi_status: Watch<CriticalSectionRawMutex, bool, 2>,
     /// MQTT broker connectivity state
@@ -66,6 +68,7 @@ impl SystemBus {
     pub const fn new() -> Self {
         Self {
             vitals: Watch::new(),
+            ecg_hr: Watch::new(),
             wifi_status: Watch::new(),
             mqtt_status: Watch::new(),
             gps: Watch::new(),

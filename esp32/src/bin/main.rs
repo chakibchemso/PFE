@@ -2,14 +2,16 @@
 #![no_main]
 
 use defmt::{info, trace};
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDeviceWithConfig;
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
+use esp_hal::time::Rate;
 use esp_hal::{
     Async,
     dma::{DmaRxBuf, DmaTxBuf},
     gpio::{Input, Output},
     interrupt::software::SoftwareInterruptControl,
-    spi::master::SpiDma,
+    spi::master::{Config as SpiConfig, Spi, SpiDma},
     system::Stack,
     timer::timg::TimerGroup,
 };
@@ -21,6 +23,7 @@ use esp32::{
     mk_static,
     services::{
         self,
+        sensing::ecg,
         storage::{StorageService, StoredConfig},
     },
     system::{self, board::init_board, init_system},
@@ -40,6 +43,33 @@ static CORE1_STACK: StaticCell<Stack<CORE1_STACK_SIZE>> = StaticCell::new();
 
 /// Thread-mode executor for core 1 (LVGL render loop + touch).
 static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
+
+// ── ECG type aliases ───────────────────────────────────────────────────────
+
+/// Concrete SPI bus type for the MAX30003 ECG sensor (interrupt-based async).
+type EcgSpiBus = Spi<'static, Async>;
+
+/// Concrete SPI device type wrapping the bus + CS pin with config.
+type EcgSpiDevice =
+    SpiDeviceWithConfig<'static, CriticalSectionRawMutex, EcgSpiBus, Output<'static>>;
+
+/// Import types we need from ecg for the concrete task.
+use esp32::drivers::ecg::EcgRunner;
+
+// ── ECG concrete task wrapper ─────────────────────────────────────────────
+
+/// Concrete ECG acquisition task.
+///
+/// Embassy 0.10 does **not** support generic `#[embassy_executor::task]`
+/// functions, so we define a concrete wrapper that delegates to the generic
+/// [`ecg_acquisition_task`](ecg::ecg_acquisition_task).
+#[embassy_executor::task]
+async fn ecg_acquisition_task_wrapper(
+    runner: EcgRunner<EcgSpiDevice>,
+    sender: embassy_sync::watch::Sender<'static, CriticalSectionRawMutex, (u8,), 2>,
+) {
+    ecg::ecg_acquisition_task(runner, sender).await;
+}
 
 // ── Core 1 bootstrap ──────────────────────────────────────────────────────
 
@@ -68,6 +98,7 @@ async fn core1_bootstrap(
     let send_display = services::rendering::SendDisplay(display);
 
     let vitals_rx = bus.vitals.receiver();
+    let ecg_hr_rx = bus.ecg_hr.receiver();
     let wifi_rx = bus.wifi_status.receiver();
     let mqtt_rx = bus.mqtt_status.receiver();
     let utc_rx = bus.utc_epoch.receiver();
@@ -80,6 +111,7 @@ async fn core1_bootstrap(
             send_display,
             display_te.0,
             vitals_rx,
+            ecg_hr_rx,
             wifi_rx,
             mqtt_rx,
             utc_rx,
@@ -113,7 +145,8 @@ async fn main(spawner: Spawner) -> ! {
 
     let board_periph = init_board(
         p.PSRAM, p.SPI2, p.DMA_CH0, p.I2C0, p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7, p.GPIO11, p.GPIO12,
-        p.GPIO13, p.GPIO14, p.GPIO15, p.GPIO38, p.GPIO39, p.GPIO40,
+        p.GPIO13, p.GPIO14, p.GPIO15, p.GPIO38, p.GPIO39, p.GPIO40, p.SPI3, p.GPIO16, p.GPIO17,
+        p.GPIO43, p.GPIO44,
     );
 
     let sw_int1;
@@ -215,6 +248,63 @@ async fn main(spawner: Spawner) -> ! {
         let pt = cipher.decrypt(&ct, &nonce);
         assert_eq!(&pt[..], &test_data, "crypto self-test failed!");
         info!("Crypto self-test passed");
+    }
+
+    // ── ECG FCLK: 32.768 kHz on GPIO18 via LEDC ────────────────────────
+    {
+        use esp_hal::ledc::channel::{ChannelIFace, Number as ChannelNumber};
+        use esp_hal::ledc::timer::{LSClockSource, TimerIFace};
+        use esp_hal::ledc::{Ledc, LowSpeed, channel, timer};
+
+        let ledc = Ledc::new(p.LEDC);
+        let mut ls_timer = ledc.timer::<LowSpeed>(timer::Number::Timer0);
+        TimerIFace::configure(
+            &mut ls_timer,
+            timer::config::Config {
+                clock_source: LSClockSource::APBClk,
+                duty: timer::config::Duty::Duty10Bit,
+                frequency: Rate::from_hz(32768),
+            },
+        )
+        .unwrap();
+        {
+            let mut fclk_channel = ledc.channel(ChannelNumber::Channel0, p.GPIO18);
+            ChannelIFace::configure(
+                &mut fclk_channel,
+                channel::config::Config {
+                    timer: &ls_timer,
+                    duty_pct: 50,
+                    drive_mode: esp_hal::gpio::DriveMode::PushPull,
+                },
+            )
+            .unwrap();
+            core::mem::forget(fclk_channel);
+        }
+        core::mem::forget(ls_timer);
+        core::mem::forget(ledc);
+    }
+
+    // ── ECG SPI device (MAX30003, SPI3) ────────────────────────────────
+    static ECG_SPI_BUS: StaticCell<Mutex<CriticalSectionRawMutex, Spi<'static, Async>>> =
+        StaticCell::new();
+    let ecg_spi_bus = ECG_SPI_BUS.init(Mutex::new(board_periph.ecg_spi));
+
+    let spi_config = SpiConfig::default()
+        .with_frequency(Rate::from_mhz(5))
+        .with_mode(esp_hal::spi::Mode::_0);
+    let ecg_spi_device = SpiDeviceWithConfig::new(ecg_spi_bus, board_periph.ecg_cs, spi_config);
+
+    // ── ECG sensor init as runner ──────────────────────────────────────
+    {
+        use esp32::drivers::low::max30003::Max30003;
+
+        let sensor = Max30003::new(ecg_spi_device);
+        let ecg_runner = ecg::init_sensor(sensor).await;
+
+        let ecg_hr_sender = bus.ecg_hr.sender();
+        spawner.spawn(ecg_acquisition_task_wrapper(ecg_runner, ecg_hr_sender).unwrap());
+
+        info!("ECG sensor started");
     }
 
     services::mqtt::register(&spawner, net.stack, bus);

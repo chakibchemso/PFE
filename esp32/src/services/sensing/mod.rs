@@ -9,6 +9,7 @@ use crate::{
 
 pub mod die_temp;
 pub mod driver;
+pub mod ecg;
 pub mod pipeline;
 pub mod task;
 use driver::OxymeterHandle;
