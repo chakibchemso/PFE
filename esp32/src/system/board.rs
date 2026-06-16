@@ -27,14 +27,6 @@
 //! |---------|-------|
 //! | GPS_SDA | GPIO15|  (shared I2C bus)
 //! | GPS_SCL | GPIO14|  (shared I2C bus)
-//!
-//! ## ECG (MAX30003, SPI3)
-//! | Signal  | GPIO  |
-//! |---------|-------|
-//! | ECG_SCK | GPIO16|
-//! | ECG_CS  | GPIO17|
-//! | ECG_MISO| GPIO43|
-//! | ECG_MOSI| GPIO44|
 
 use esp_hal::{
     Async,
@@ -76,8 +68,6 @@ pub struct BoardPeripherals {
     pub display_cs: Output<'static>,
     pub display_rst: Output<'static>,
     pub display_te: Input<'static>,
-    pub ecg_spi: Spi<'static, Async>,
-    pub ecg_cs: Output<'static>,
     pub touch_rst: Output<'static>,
     pub touch_int: Input<'static>,
 }
@@ -92,8 +82,6 @@ pub struct BoardPeripherals {
 /// - GPIO13: display TE (tearing effect / VSYNC input)
 /// - GPIO39: display reset
 /// - GPIO11, GPIO40: touch INT and reset
-/// - SPI3, GPIO16, GPIO44, GPIO43: ECG SPI bus
-/// - GPIO17: ECG CS
 #[allow(clippy::too_many_arguments)]
 pub fn init_board(
     psram: peripherals::PSRAM<'static>,
@@ -112,11 +100,6 @@ pub fn init_board(
     gpio38: peripherals::GPIO38<'static>,
     gpio39: peripherals::GPIO39<'static>,
     gpio40: peripherals::GPIO40<'static>,
-    spi3: peripherals::SPI3<'static>,
-    gpio16: peripherals::GPIO16<'static>,
-    gpio17: peripherals::GPIO17<'static>,
-    gpio43: peripherals::GPIO43<'static>,
-    gpio44: peripherals::GPIO44<'static>,
 ) -> BoardPeripherals {
     // Initialize heap: DRAM for WiFi DMA + PSRAM for everything else.
     // WiFi hardware DMA cannot address PSRAM — its buffers MUST land in
@@ -192,21 +175,6 @@ pub fn init_board(
     .with_sda(gpio15)
     .into_async();
 
-    // --- ECG SPI (SPI3, dedicated bus for MAX30003) ---
-    let ecg_spi = Spi::new(
-        spi3,
-        SpiConfig::default()
-            .with_frequency(Rate::from_mhz(5))
-            .with_mode(esp_hal::spi::Mode::_0),
-    )
-    .expect("Failed to initialize ECG SPI")
-    .with_sck(gpio16)
-    .with_mosi(gpio44)
-    .with_miso(gpio43)
-    .into_async();
-
-    let ecg_cs = Output::new(gpio17, Level::High, OutputConfig::default());
-
     BoardPeripherals {
         i2c_bus,
         qspi_spi,
@@ -215,8 +183,6 @@ pub fn init_board(
         display_cs,
         display_rst,
         display_te,
-        ecg_spi,
-        ecg_cs,
         touch_rst,
         touch_int,
     }

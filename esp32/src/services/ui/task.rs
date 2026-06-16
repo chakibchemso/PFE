@@ -30,7 +30,6 @@ pub struct PendingSave {
 pub static PENDING_SAVES: Channel<CriticalSectionRawMutex, PendingSave, 8> = Channel::new();
 
 use crate::app::bus::BatteryState;
-use crate::drivers::ecg::ECG_SAMPLE_BUFFER;
 use crate::drivers::oxymeter::{SAMPLE_BUFFER, WAVEFORM_CHANNEL};
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{
@@ -59,9 +58,6 @@ type UtcReceiver = Receiver<'static, CriticalSectionRawMutex, u64, 2>;
 
 /// Receiver for battery state.
 type BatteryReceiver = Receiver<'static, CriticalSectionRawMutex, BatteryState, 2>;
-
-/// Receiver for ECG heart rate (BPM) from the MAX30003 sensor.
-type EcgHrReceiver = Receiver<'static, CriticalSectionRawMutex, (u8,), 2>;
 
 /// Set an LVGL label to a formatted value, e.g. `set_label(handle, 72, " BPM")`
 /// produces `"72 BPM"`. Uses `lv_label_set_text` directly with a stack buffer.
@@ -101,7 +97,6 @@ pub async fn render_task(
     display: SendDisplay,
     te: Input<'static>,
     mut vitals_rx: Option<VitalsReceiver>,
-    mut ecg_hr_rx: Option<EcgHrReceiver>,
     mut wifi_rx: Option<WifiReceiver>,
     mut mqtt_rx: Option<MqttReceiver>,
     utc_rx: Option<UtcReceiver>,
@@ -472,41 +467,6 @@ pub async fn render_task(
                         }
                     }
                 }
-            }
-        }
-
-        // ── ECG HR update ───────────────────────────────────────────
-        if let Some(ref mut rx) = ecg_hr_rx {
-            if let Some((hr,)) = rx.try_changed() {
-                unsafe {
-                    if hr == 0 {
-                        lv_bevy_ecs::sys::lv_label_set_text(
-                            handles.ecg.hr_label,
-                            cstr!("--").as_ptr(),
-                        );
-                        lv_bevy_ecs::sys::lv_label_set_text(
-                            handles.ecg.lead_label,
-                            cstr!("Lead Off").as_ptr(),
-                        );
-                    } else {
-                        set_label_u8(handles.ecg.hr_label, hr, "");
-                        lv_bevy_ecs::sys::lv_label_set_text(
-                            handles.ecg.lead_label,
-                            cstr!("Lead On").as_ptr(),
-                        );
-                    }
-                }
-            }
-        }
-
-        // ── Drain ECG waveform samples into chart ──────────────────
-        while let Ok(sample) = ECG_SAMPLE_BUFFER.try_receive() {
-            unsafe {
-                lv_bevy_ecs::sys::lv_chart_set_next_value(
-                    handles.ecg.chart,
-                    handles.ecg.ecg_series,
-                    sample,
-                );
             }
         }
 
