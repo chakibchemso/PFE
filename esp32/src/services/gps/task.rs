@@ -9,6 +9,12 @@ use crate::app::bus::GpsFix;
 use crate::drivers::bus::I2cPeripheral;
 use crate::drivers::gps::Lc76g;
 
+/// Number of times to retry the wake-up write flow before entering the poll
+/// loop. Per the I2C application note, a write flow wakes the I2C transmitter
+/// if it entered sleep state due to a full TX buffer (e.g. from a previous
+/// session without a reader active).
+const WAKEUP_RETRIES: u8 = 10;
+
 #[embassy_executor::task]
 pub async fn gps_task(
     i2c: I2cPeripheral,
@@ -17,32 +23,66 @@ pub async fn gps_task(
     let mut gps = Lc76g::new(i2c);
     let mut nmea = Nmea::create_for_navigation(&[SentenceType::RMC, SentenceType::GGA]).unwrap();
 
-    // --- Power on sequence ---
-    // info!("GPS: sending PAIR002 (power on)...");
-    // match gps.send_command(b"$PAIR002*38\r\n").await {
-    //     Ok(_) => info!("GPS: PAIR002 sent OK"),
-    //     Err(e) => warn!("GPS: PAIR002 send failed: {}", defmt::Debug2Format(&e)),
-    // }
+    // --- I2C transmitter wake-up ---
+    // If the module was left running in a previous session without a reader
+    // draining its TX buffer, the I2C may have entered sleep state (per the
+    // I2C application note §3.1 note 2).  Sending a complete write flow
+    // (PAIR002 power-on) wakes the transmitter so the subsequent poll loop
+    // can read NMEA data.
+    for attempt in 0u8..WAKEUP_RETRIES {
+        // I2C bus recovery: send dummy byte to each address to reset the
+        // slave state machine before attempting the write flow.
+        gps.recover().await;
+        Timer::after(Duration::from_millis(10)).await;
+
+        match gps.send_command(b"$PAIR002*38\r\n").await {
+            Ok(_) => {
+                info!("GPS: PAIR002 power-on sent OK (attempt {})", attempt + 1);
+                break;
+            }
+            Err(e) if attempt < WAKEUP_RETRIES - 1 => {
+                warn!(
+                    "GPS: PAIR002 failed (attempt {}), retrying: {}",
+                    attempt + 1,
+                    defmt::Debug2Format(&e)
+                );
+                Timer::after(Duration::from_millis(100)).await;
+            }
+            Err(e) => {
+                warn!(
+                    "GPS: PAIR002 failed after {} attempts: {}",
+                    WAKEUP_RETRIES,
+                    defmt::Debug2Format(&e)
+                );
+            }
+        }
+    }
 
     // Cold start — retry a few times; the I2C bridge sometimes NACKs
     // the first write while processing PAIR002's ACKs.
-    // Timer::after(Duration::from_millis(500)).await;
-    // for attempt in 0u8..3 {
-    //     info!("GPS: sending PAIR006 cold start (attempt {})...", attempt + 1);
-    //     match gps.send_command(b"$PAIR006*3C\r\n").await {
-    //         Ok(_) => {
-    //             info!("GPS: PAIR006 sent OK");
-    //             break;
-    //         }
-    //         Err(e) if attempt < 2 => {
-    //             warn!("GPS: PAIR006 failed, retrying: {}", defmt::Debug2Format(&e));
-    //             Timer::after(Duration::from_millis(500)).await;
-    //         }
-    //         Err(e) => {
-    //             warn!("GPS: PAIR006 failed after 3 attempts: {}", defmt::Debug2Format(&e));
-    //         }
-    //     }
-    // }
+    Timer::after(Duration::from_millis(500)).await;
+    for attempt in 0u8..3 {
+        info!(
+            "GPS: sending PAIR006 cold start (attempt {})...",
+            attempt + 1
+        );
+        match gps.send_command(b"$PAIR006*3C\r\n").await {
+            Ok(_) => {
+                info!("GPS: PAIR006 sent OK");
+                break;
+            }
+            Err(e) if attempt < 2 => {
+                warn!("GPS: PAIR006 failed, retrying: {}", defmt::Debug2Format(&e));
+                Timer::after(Duration::from_millis(500)).await;
+            }
+            Err(e) => {
+                warn!(
+                    "GPS: PAIR006 failed after 3 attempts: {}",
+                    defmt::Debug2Format(&e)
+                );
+            }
+        }
+    }
 
     info!("GPS task entering poll loop");
 

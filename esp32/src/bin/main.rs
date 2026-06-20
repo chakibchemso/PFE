@@ -72,6 +72,7 @@ async fn core1_bootstrap(
     let mqtt_rx = bus.mqtt_status.receiver();
     let utc_rx = bus.utc_epoch.receiver();
     let battery_rx = bus.battery.receiver();
+    // let gps_rx = bus.gps.receiver(); // TODO: re-enable GPS
 
     spawner.spawn(
         services::ui::task::render_task(
@@ -84,6 +85,7 @@ async fn core1_bootstrap(
             mqtt_rx,
             utc_rx,
             battery_rx,
+            None, // TODO: re-enable GPS — pass gps_rx here
             storage,
             stored_config,
         )
@@ -136,6 +138,7 @@ async fn main(spawner: Spawner) -> ! {
     let touch_i2c = i2c_bus.device(0x5A, "touch");
     let oxymeter_i2c = i2c_bus.device(0x57, "oxymeter");
     let axp2101_i2c = i2c_bus.device(0x34, "axp2101");
+    // let gps_i2c = i2c_bus.device(0x50, "gps"); // TODO: re-enable GPS
 
     // ── Storage ─────────────────────────────────────────────────────────
     let storage = mk_static!(StorageService, StorageService::new(flash));
@@ -223,6 +226,8 @@ async fn main(spawner: Spawner) -> ! {
         core::mem::transmute(p.SENS)
     })
     .await;
+
+    // services::gps::register(&spawner, gps_i2c, bus); // TODO: re-enable GPS
 
     services::power::register(&spawner, axp2101_i2c, bus).await;
 

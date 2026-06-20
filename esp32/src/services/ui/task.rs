@@ -29,7 +29,8 @@ pub struct PendingSave {
 
 pub static PENDING_SAVES: Channel<CriticalSectionRawMutex, PendingSave, 8> = Channel::new();
 
-use crate::app::bus::BatteryState;
+use crate::app::bus::{BatteryState, GpsFix};
+use crate::drivers::gps;
 use crate::drivers::oxymeter::{SAMPLE_BUFFER, WAVEFORM_CHANNEL};
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{
@@ -59,7 +60,51 @@ type UtcReceiver = Receiver<'static, CriticalSectionRawMutex, u64, 2>;
 /// Receiver for battery state.
 type BatteryReceiver = Receiver<'static, CriticalSectionRawMutex, BatteryState, 2>;
 
+/// Receiver for GPS fix data.
+type GpsReceiver = Receiver<'static, CriticalSectionRawMutex, Option<GpsFix>, 2>;
+
 /// Set an LVGL label to a formatted value, e.g. `set_label(handle, 72, " BPM")`
+/// produces `"72 BPM"`. Uses `lv_label_set_text` directly with a stack buffer.
+/// Set an LVGL label to a formatted `u32` value, e.g. `set_label(handle, 72, " km/h")`
+/// produces `"72 km/h"`. Properly handles values up to 99999.
+fn set_label_u32(handle: *mut lv_bevy_ecs::sys::lv_obj_t, val: u32, suffix: &str) {
+    let mut buf = [0u8; 48];
+    let suffix_bytes = suffix.as_bytes();
+
+    // Count digits needed
+    let digits = if val == 0 {
+        1
+    } else {
+        let mut count = 0u32;
+        let mut v = val;
+        while v > 0 {
+            count += 1;
+            v /= 10;
+        }
+        count
+    };
+
+    let mut pos = digits as usize;
+    let mut v = val;
+    while pos > 0 {
+        pos -= 1;
+        buf[pos] = b'0' + (v % 10) as u8;
+        v /= 10;
+    }
+    pos = digits as usize;
+
+    let remaining = buf.len().saturating_sub(pos).min(suffix_bytes.len());
+    buf[pos..pos + remaining].copy_from_slice(&suffix_bytes[..remaining]);
+    pos += remaining;
+    buf[pos] = 0;
+
+    unsafe {
+        lv_bevy_ecs::sys::lv_label_set_text(handle, buf.as_ptr() as *const core::ffi::c_char);
+        lv_bevy_ecs::sys::lv_obj_invalidate(handle);
+    }
+}
+
+/// Set an LVGL label to a formatted `u8` value, e.g. `set_label(handle, 72, " BPM")`
 /// produces `"72 BPM"`. Uses `lv_label_set_text` directly with a stack buffer.
 fn set_label_u8(handle: *mut lv_bevy_ecs::sys::lv_obj_t, val: u8, suffix: &str) {
     let mut buf = [0u8; 32];
@@ -101,6 +146,7 @@ pub async fn render_task(
     mut mqtt_rx: Option<MqttReceiver>,
     utc_rx: Option<UtcReceiver>,
     mut battery_rx: Option<BatteryReceiver>,
+    mut gps_rx: Option<GpsReceiver>,
     storage: &'static StorageService,
     stored_config: &'static Mutex<CriticalSectionRawMutex, StoredConfig>,
 ) -> ! {
@@ -463,6 +509,142 @@ pub async fn render_task(
                             lv_bevy_ecs::sys::lv_label_set_text(
                                 handles.watchface.battery_pct,
                                 cstr!("NA").as_ptr(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Poll GPS data
+        if let Some(ref mut rx) = gps_rx {
+            if let Some(fix_opt) = rx.try_changed() {
+                unsafe {
+                    match fix_opt {
+                        Some(fix) => {
+                            // Fix status LED + label
+                            if fix.has_fix {
+                                lv_bevy_ecs::sys::lv_led_set_color(
+                                    handles.gps.fix_led,
+                                    lv_bevy_ecs::functions::lv_color_hex(0xa6e3a1),
+                                );
+                                lv_bevy_ecs::sys::lv_led_on(handles.gps.fix_led);
+                                lv_bevy_ecs::sys::lv_label_set_text(
+                                    handles.gps.fix_label,
+                                    cstr!("3D Fix").as_ptr(),
+                                );
+                            } else {
+                                lv_bevy_ecs::sys::lv_led_set_color(
+                                    handles.gps.fix_led,
+                                    lv_bevy_ecs::functions::lv_color_hex(0x6c7086),
+                                );
+                                lv_bevy_ecs::sys::lv_led_off(handles.gps.fix_led);
+                                lv_bevy_ecs::sys::lv_label_set_text(
+                                    handles.gps.fix_label,
+                                    cstr!("No Fix").as_ptr(),
+                                );
+                            }
+
+                            // Coordinates
+                            let (coord_buf, _) = gps::format_coords(fix.lat, fix.lon);
+                            lv_bevy_ecs::sys::lv_label_set_text(
+                                handles.gps.coord_label,
+                                coord_buf.as_ptr() as *const core::ffi::c_char,
+                            );
+
+                            // Speed (integer part)
+                            set_label_u32(handles.gps.speed_label, fix.speed_kmh as u32, " km/h");
+
+                            // Heading (integer part)
+                            set_label_u32(
+                                handles.gps.heading_label,
+                                fix.heading_deg as u32,
+                                "\u{00B0}",
+                            );
+
+                            // Altitude (integer part, handle negative)
+                            let alt_i32 = fix.altitude_m as i32;
+                            if alt_i32 >= 0 {
+                                set_label_u32(handles.gps.altitude_label, alt_i32 as u32, " m");
+                            } else {
+                                let mut buf = [0u8; 32];
+                                let suffix_bytes = b" m";
+                                buf[0] = b'-';
+                                let abs_val = (-alt_i32) as u32;
+                                let digits = if abs_val == 0 {
+                                    1
+                                } else {
+                                    let mut count = 0u32;
+                                    let mut v = abs_val;
+                                    while v > 0 {
+                                        count += 1;
+                                        v /= 10;
+                                    }
+                                    count
+                                };
+                                let mut pos = digits as usize;
+                                let mut v = abs_val;
+                                while pos > 0 {
+                                    pos -= 1;
+                                    buf[pos + 1] = b'0' + (v % 10) as u8;
+                                    v /= 10;
+                                }
+                                pos = 1 + digits as usize;
+                                let remaining =
+                                    buf.len().saturating_sub(pos).min(suffix_bytes.len());
+                                buf[pos..pos + remaining]
+                                    .copy_from_slice(&suffix_bytes[..remaining]);
+                                pos += remaining;
+                                buf[pos] = 0;
+                                lv_bevy_ecs::sys::lv_label_set_text(
+                                    handles.gps.altitude_label,
+                                    buf.as_ptr() as *const core::ffi::c_char,
+                                );
+                                lv_bevy_ecs::sys::lv_obj_invalidate(handles.gps.altitude_label);
+                            }
+
+                            // Satellites
+                            set_label_u32(handles.gps.sats_label, fix.satellites as u32, " Sats");
+
+                            // Fix quality
+                            let qual = match fix.fix_quality {
+                                0 => c"Invalid",
+                                1 => c"GPS fix",
+                                2 => c"DGPS fix",
+                                3 => c"PPS fix",
+                                4 => c"RTK fix",
+                                5 => c"Float RTK",
+                                6 => c"Estimated",
+                                7 => c"Manual",
+                                8 => c"Simulation",
+                                _ => c"Unknown",
+                            };
+                            lv_bevy_ecs::sys::lv_label_set_text(
+                                handles.gps.quality_label,
+                                qual.as_ptr(),
+                            );
+                        }
+                        None => {
+                            lv_bevy_ecs::sys::lv_led_set_color(
+                                handles.gps.fix_led,
+                                lv_bevy_ecs::functions::lv_color_hex(0x6c7086),
+                            );
+                            lv_bevy_ecs::sys::lv_led_off(handles.gps.fix_led);
+                            lv_bevy_ecs::sys::lv_label_set_text(
+                                handles.gps.fix_label,
+                                cstr!("No Fix").as_ptr(),
+                            );
+                            lv_bevy_ecs::sys::lv_label_set_text(
+                                handles.gps.coord_label,
+                                cstr!("--").as_ptr(),
+                            );
+                            set_label_u32(handles.gps.speed_label, 0, " km/h");
+                            set_label_u32(handles.gps.heading_label, 0, "\u{00B0}");
+                            set_label_u32(handles.gps.altitude_label, 0, " m");
+                            set_label_u32(handles.gps.sats_label, 0, " Sats");
+                            lv_bevy_ecs::sys::lv_label_set_text(
+                                handles.gps.quality_label,
+                                cstr!("---").as_ptr(),
                             );
                         }
                     }
