@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Model Canvas - MedSecure Watch</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            600: '#0284c7',
+                            800: '#075985',
+                            900: '#0c4a6e',
+                            dark: '#0f172a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; color: black; }
+            .print-card { border: 1px solid #cbd5e1 !important; page-break-inside: avoid; }
+        }
+        /* Custom styles for AI chat bubbles and typing indicators */
+        .chat-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .ai-gradient-border {
+            border: 2px solid transparent;
+            background-image: linear-gradient(white, white), linear-gradient(to right, #0284c7, #3b82f6, #06b6d4);
+            background-origin: border-box;
+            background-clip: padding-box, border-box;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+    <!-- Header Section -->
+    <header class="bg-brand-900 text-white shadow-lg no-print">
+        <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand-600 p-2.5 rounded-lg text-white text-2xl">
+                    <i class="fa-solid fa-heart-pulse animate-pulse"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold tracking-tight">MedSecure Watch</h1>
+                    <p class="text-xs text-brand-100 uppercase tracking-widest font-semibold">Business Model Canvas - Projet de Télémédecine Sécurisée</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="#ai-copilot-section" class="bg-gradient-to-r from-cyan-600 to-brand-600 hover:from-cyan-700 hover:to-brand-700 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 shadow border border-cyan-400/30">
+                    <i class="fa-solid fa-robot animate-bounce"></i> Assistant IA Stratégique
+                </a>
+                <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 shadow border border-slate-700">
+                    <i class="fa-solid fa-print"></i> Imprimer / Exporter PDF
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        
+        <!-- Quick Stats Overview (Inspiré de l'image de référence) -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 no-print">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-teal-50 text-teal-600 rounded-lg text-xl"><i class="fa-solid fa-shield-halved"></i></div>
+                <div>
+                    <p class="text-xs text-slate-500 font-medium uppercase">Sécurité Standard</p>
+                    <p class="text-lg font-bold text-slate-800">ASCON-128 NIST</p>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-blue-50 text-blue-600 rounded-lg text-xl"><i class="fa-solid fa-microchip"></i></div>
+                <div>
+                    <p class="text-xs text-slate-500 font-medium uppercase">Technologie Souveraine</p>
+                    <p class="text-lg font-bold text-slate-800">100% Rust Firmware</p>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-amber-50 text-amber-600 rounded-lg text-xl"><i class="fa-solid fa-coins"></i></div>
+                <div>
+                    <p class="text-xs text-slate-500 font-medium uppercase">Objectif Prix Visé</p>
+                    <p class="text-lg font-bold text-slate-800">10 000 - 20 000 DA</p>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-lg text-xl"><i class="fa-solid fa-bullseye"></i></div>
+                <div>
+                    <p class="text-xs text-slate-500 font-medium uppercase">Seuil Rentabilité</p>
+                    <p class="text-lg font-bold text-slate-800">93 Dispositifs</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- THE BUSINESS MODEL CANVAS GRID -->
+        <div class="bg-slate-200 p-2 rounded-2xl shadow-inner border border-slate-300 grid grid-cols-1 lg:grid-cols-5 gap-2 mb-8">
+            
+            <!-- 1. Partenaires Clés (Col 1, Spans Row 1 & 2) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 flex flex-col justify-between lg:row-span-2 print-card">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-slate-100 pb-3 mb-4">
+                        <span class="bg-brand-50 text-brand-600 p-1.5 rounded-md"><i class="fa-solid fa-handshake"></i></span>
+                        <h2 class="text-sm tracking-wide uppercase">Partenaires Clés</h2>
+                    </div>
+                    <ul class="space-y-3 text-xs text-slate-600">
+                        <li class="p-2 bg-slate-50 rounded border-l-4 border-brand-600">
+                            <strong>Flespi :</strong> Broker MQTT tiers pour couverture mondiale à faible latence et coûts réduits.
+                        </li>
+                        <li class="p-2 bg-slate-50 rounded border-l-4 border-brand-600">
+                            <strong>Gowin / FPGA :</strong> Cœur cryptographique hardware ultra-basse consommation.
+                        </li>
+                        <li class="p-2 bg-slate-50 rounded border-l-4 border-brand-600">
+                            <strong>USTO-MB / LMSE :</strong> Laboratoire partenaire pour la R&D académique et le prototypage.
+                        </li>
+                        <li class="p-2 bg-slate-50 rounded border-l-4 border-brand-600">
+                            <strong>CHU d'Oran :</strong> Partenaire hospitalier pour les essais cliniques et la validation.
+                        </li>
+                        <li class="p-2 bg-slate-50 rounded border-l-4 border-brand-600">
+                            <strong>Incubateur USTO :</strong> Accompagnement, mentoring et obtention du Label Startup.
+                        </li>
+                    </ul>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400">
+                    <i class="fa-solid fa-link"></i> Intégration locale & technologique
+                </div>
+            </div>
+
+            <!-- 2. Activités Clés (Col 2, Row 1) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 flex flex-col justify-between print-card">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-slate-100 pb-3 mb-4">
+                        <span class="bg-brand-50 text-brand-600 p-1.5 rounded-md"><i class="fa-solid fa-gears"></i></span>
+                        <h2 class="text-sm tracking-wide uppercase">Activités Clés</h2>
+                    </div>
+                    <ul class="space-y-2 text-xs text-slate-600">
+                        <li>• <strong>R&D logicielle & firmware :</strong> Développement 100% Rust (firmware + plateforme SSR WebAssembly).</li>
+                        <li>• <strong>Conception Matérielle :</strong> Design électronique, intégration de capteurs (MAX30102) et CAO boîtiers 3D.</li>
+                        <li>• <strong>Validation Médicale :</strong> Tests de conformité clinique et démarches de certification ISO 13485 / 27001.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 3. Propositions de Valeur (Col 3, Spans Row 1 & 2) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 flex flex-col justify-between lg:row-span-2 print-card bg-gradient-to-b from-white to-sky-50/30">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-brand-100 pb-3 mb-4">
+                        <span class="bg-brand-600 text-white p-1.5 rounded-md"><i class="fa-solid fa-gift"></i></span>
+                        <h2 class="text-sm tracking-wide uppercase">Proposition de Valeur</h2>
+                    </div>
+                    <div class="space-y-3 text-xs text-slate-600">
+                        <div class="p-2.5 bg-sky-50 rounded-lg border border-sky-100">
+                            <span class="font-bold text-brand-900 block mb-1">🔒 Sécurité Absolue</span>
+                            Chiffrement de bout en bout ASCON-128 (NIST) avec modèle "cloud zero-knowledge". Seul le médecin déchiffre dans son navigateur.
+                        </div>
+                        <div class="p-2.5 bg-sky-50 rounded-lg border border-sky-100">
+                            <span class="font-bold text-brand-900 block mb-1">🇩🇿 Souveraineté & Économie</span>
+                            Code 100% interne en Rust, sans dépendances opaques. Matériel 3 à 5 fois moins cher que l'importation (10k-20k DA).
+                        </div>
+                        <div class="p-2.5 bg-sky-50 rounded-lg border border-sky-100">
+                            <span class="font-bold text-brand-900 block mb-1">⚡ Performance & Autonomie</span>
+                            Faible consommation (<50mW) sur ESP32-S3, autonomie robuste de 48h à 72h.
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-brand-100 text-[10px] text-brand-600 font-semibold">
+                    <i class="fa-solid fa-certificate"></i> « Vos données restent les vôtres »
+                </div>
+            </div>
+
+            <!-- 4. Relations Clients (Col 4, Row 1) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 flex flex-col justify-between print-card">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-slate-100 pb-3 mb-4">
+                        <span class="bg-brand-50 text-brand-600 p-1.5 rounded-md"><i class="fa-solid fa-heart-circle-check"></i></span>
+                        <h2 class="text-sm tracking-wide uppercase">Relations Clients</h2>
+                    </div>
+                    <ul class="space-y-2 text-xs text-slate-600">
+                        <li>• <strong>Modèle Zero-Trust :</strong> Confiance absolue garantie par l'architecture mathématique (aucune clé stockée en ligne).</li>
+                        <li>• <strong>Support Technique Local :</strong> Équipe dédiée basée en Algérie, disponible en arabe et en français.</li>
+                        <li>• <strong>Accompagnement Clinique :</strong> Formations pour le personnel de santé B2B.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 5. Segments Clients (Col 5, Spans Row 1 & 2) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 flex flex-col justify-between lg:row-span-2 print-card">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-slate-100 pb-3 mb-4">
+                        <span class="bg-brand-50 text-brand-600 p-1.5 rounded-md"><i class="fa-solid fa-users"></i></span>
+                        <h2 class="text-sm tracking-wide uppercase">Segments Clients</h2>
+                    </div>
+                    <ul class="space-y-3 text-xs text-slate-600">
+                        <li class="p-2 bg-slate-50 rounded border-r-4 border-brand-600 text-right">
+                            <span class="font-bold block text-brand-800">Grand Public (B2C)</span>
+                            Aidants familiaux (35-65 ans), familles de patients chroniques souhaitant une surveillance fiable et abordable.
+                        </li>
+                        <li class="p-2 bg-slate-50 rounded border-r-4 border-brand-600 text-right">
+                            <span class="font-bold block text-brand-800">Professionnels de Santé (B2B)</span>
+                            Cliniques privées, maisons de retraite, cardiologues et services de suivi à domicile (Oran & Ouest Algérien).
+                        </li>
+                        <li class="p-2 bg-slate-50 rounded border-r-4 border-brand-600 text-right">
+                            <span class="font-bold block text-brand-800">Secteur Public (B2G)</span>
+                            Hôpitaux publics, centres de santé ruraux dans le cadre de la politique de lutte contre la désertification médicale.
+                        </li>
+                    </ul>
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400">
+                    <i class="fa-solid fa-earth-africa"></i> Focus initial : Algérie (Zones sous-médicalisées)
+                </div>
+            </div>
+
+            <!-- 6. Ressources Clés (Col 2, Row 2) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 flex flex-col justify-between print-card">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-slate-100 pb-3 mb-4">
+                        <span class="bg-brand-50 text-brand-600 p-1.5 rounded-md"><i class="fa-solid fa-microchip"></i></span>
+                        <h2 class="text-sm tracking-wide uppercase">Ressources Clés</h2>
+                    </div>
+                    <ul class="space-y-2 text-xs text-slate-600">
+                        <li>• <strong>Humaines :</strong> Expertise interne en cybersécurité, programmation Rust système et ingénierie biomédicale.</li>
+                        <li>• <strong>Matérielles :</strong> Matériel d'assemblage PCB, parc d'imprimantes 3D pour boîtiers (PETG/ASA).</li>
+                        <li>• <strong>Technologiques :</strong> Code source propriétaire Rust, algorithme ASCON optimisé sur FPGA.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 7. Canaux (Col 4, Row 2) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 flex flex-col justify-between print-card">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-slate-100 pb-3 mb-4">
+                        <span class="bg-brand-50 text-brand-600 p-1.5 rounded-md"><i class="fa-solid fa-truck-fast"></i></span>
+                        <h2 class="text-sm tracking-wide uppercase">Canaux de Distribution</h2>
+                    </div>
+                    <ul class="space-y-2 text-xs text-slate-600">
+                        <li>• <strong>Canaux Digitaux :</strong> Campagnes ciblées sur Facebook & Instagram ciblant les aidants, SEO de la plateforme.</li>
+                        <li>• <strong>Réseaux Médicaux :</strong> Distribution de brochures dans les CHU, présence aux congrès de cardiologie.</li>
+                        <li>• <strong>Événementiel :</strong> Présentations institutionnelles (Salon SantExpo Alger, médias).</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 8. Structure des Coûts (Col 1-2.5, Row 3) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 lg:col-span-2 print-card">
+                <div class="flex items-center gap-2 text-rose-800 font-bold border-b border-rose-100 pb-3 mb-4">
+                    <span class="bg-rose-50 text-rose-600 p-1.5 rounded-md"><i class="fa-solid fa-wallet"></i></span>
+                    <h2 class="text-sm tracking-wide uppercase">Structure des Coûts</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-slate-600">
+                    <div>
+                        <span class="font-bold text-slate-800 block mb-1">💰 Coûts d'Investissement (R&D) :</span>
+                        <p class="mb-2">Total amorti (3 ans) : <strong>400 000 DA</strong></p>
+                        <ul class="list-disc list-inside space-y-1 pl-1 text-slate-500">
+                            <li>R&D prototype : 120k DA</li>
+                            <li>Développement logiciel : 200k DA</li>
+                            <li>Frais de certification : 80k DA</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <span class="font-bold text-slate-800 block mb-1">🛠 Coût Variable Unitaire : 7 500 DA</span>
+                        <ul class="list-disc list-inside space-y-1 pl-1 text-slate-500 mb-2">
+                            <li>Matériel (ESP32-S3, capteurs, PCB, boîtier) : 5 150 DA</li>
+                            <li>Assemblage/Soudure : 1 500 DA</li>
+                            <li>Packaging : 350 DA</li>
+                            <li>Logistique locale : 500 DA</li>
+                        </ul>
+                        <p><strong>Charges Fixes :</strong> 58 000 DA/mois (Loyer incubateur, cloud serverless, marketing, équipe).</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. Sources de Revenus (Col 3.5-5, Row 3) -->
+            <div class="bg-white p-5 rounded-xl border border-slate-100 lg:col-span-3 print-card bg-gradient-to-r from-white to-emerald-50/20">
+                <div class="flex items-center gap-2 text-emerald-800 font-bold border-b border-emerald-100 pb-3 mb-4">
+                    <span class="bg-emerald-50 text-emerald-600 p-1.5 rounded-md"><i class="fa-solid fa-money-bill-trend-up"></i></span>
+                    <h2 class="text-sm tracking-wide uppercase">Sources de Revenus</h2>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-600">
+                    <div class="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                        <span class="font-bold text-emerald-900 block mb-1">📦 Ventes Matériel (B2C)</span>
+                        <p class="text-[11px] mb-1"><strong>Kit Initial : 20 000 DA</strong></p>
+                        <p class="text-slate-500 text-[10px]">Comprend la montre connectée, les accessoires et 3 mois d'abonnement à la plateforme.</p>
+                    </div>
+                    <div class="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                        <span class="font-bold text-emerald-900 block mb-1">🔄 Flux Récurrent (SaaS)</span>
+                        <p class="text-[11px] mb-1"><strong>Abonnement : 1 500 DA/mois</strong></p>
+                        <p class="text-slate-500 text-[10px]">Payé par le patient ou l'aidant à l'issue de la période gratuite pour l'accès continu.</p>
+                    </div>
+                    <div class="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                        <span class="font-bold text-emerald-900 block mb-1">🏢 B2B / B2G</span>
+                        <p class="text-[11px] mb-1"><strong>Tarif B2B : 15 000 DA/appareil</strong></p>
+                        <p class="text-slate-500 text-[10px]">Modèle de gros pour les cliniques et appels d'offres publics du secteur de la santé (B2G).</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- INTERACTIVE FINANCIAL PROJECTIONS & SCENARIOS -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 no-print mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-100 pb-4 mb-6 gap-4">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800">Simulateur d'Objectifs & Scénarios (Année 1)</h3>
+                    <p class="text-xs text-slate-500">Sélectionnez un scénario pour visualiser l'impact financier et le seuil de rentabilité.</p>
+                </div>
+                <div class="inline-flex rounded-md shadow-sm">
+                    <button onclick="selectScenario('prudent', 50, 1225000, 850000)" id="btn-prudent" class="px-4 py-2 text-xs font-semibold rounded-l-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all">
+                        Prudent (50 u)
+                    </button>
+                    <button onclick="selectScenario('realiste', 150, 4350000, 3225000)" id="btn-realiste" class="px-4 py-2 text-xs font-semibold border-t border-b border-slate-200 bg-brand-600 text-white hover:bg-brand-700 transition-all">
+                        Réaliste (150 u)
+                    </button>
+                    <button onclick="selectScenario('optimiste', 300, 9750000, 6600000)" id="btn-optimiste" class="px-4 py-2 text-xs font-semibold rounded-r-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-all">
+                        Optimiste (300 u)
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Inputs & Unit Economics -->
+                <div class="space-y-4">
+                    <h4 class="text-sm font-semibold text-slate-700 border-b border-slate-50 pb-2">Économie Unitaire</h4>
+                    <div class="space-y-2 text-xs text-slate-600">
+                        <div class="flex justify-between py-1 border-b border-slate-50">
+                            <span>Prix de vente unitaire (Moyen)</span>
+                            <span class="font-bold text-slate-800">~29 000 DA</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-50">
+                            <span>Coût de production matériel</span>
+                            <span class="font-semibold text-rose-600">- 5 150 DA</span>
+                        </div>
+                        <div class="flex justify-between py-1 border-b border-slate-50">
+                            <span>Assemblage, emballage & logistique</span>
+                            <span class="font-semibold text-rose-600">- 2 350 DA</span>
+                        </div>
+                        <div class="flex justify-between py-1 font-bold text-slate-800">
+                            <span>Marge brute par unité</span>
+                            <span class="text-emerald-600">+ 21 500 DA</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Results -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-700 mb-3">Résultats Financiers Estimés</h4>
+                        <div class="space-y-3">
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 font-bold block">Chiffre d'Affaires</span>
+                                <span id="display-ca" class="text-2xl font-black text-brand-900">4 350 000 DA</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 font-bold block">Marge Brute Globale</span>
+                                <span id="display-marge" class="text-lg font-bold text-emerald-600">3 225 000 DA</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pt-3 border-t border-slate-200 text-xs text-slate-500">
+                        *Basé sur une estimation moyenne d'abonnement SaaS récurrent sur l'année 1.
+                    </div>
+                </div>
+
+                <!-- Break-Even Gauge -->
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h4 class="text-sm font-semibold text-slate-700 mb-2">Jauge de Rentabilité</h4>
+                        <p class="text-[10px] text-slate-400 mb-3">Seuil critique : <strong>93 unités</strong> vendues pour couvrir l'ensemble des charges et amortissements de l'année 1.</p>
+                        
+                        <div class="w-full bg-slate-200 rounded-full h-4 mb-2 overflow-hidden relative">
+                            <div id="gauge-bar" class="bg-emerald-500 h-4 rounded-full transition-all duration-500" style="width: 100%;"></div>
+                        </div>
+                        <div class="flex justify-between text-[11px] font-semibold text-slate-600">
+                            <span>0 u.</span>
+                            <span class="text-rose-500">Seuil (93 u.)</span>
+                            <span id="label-target">Objectif (150 u.)</span>
+                        </div>
+                    </div>
+                    <div class="bg-white p-2.5 rounded border border-slate-200 text-xs text-slate-700">
+                        <i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> <span id="status-text">Projet rentable au cours du premier exercice.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- GEMINI AI COPILOT SECTION -->
+        <div id="ai-copilot-section" class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 no-print">
+            
+            <!-- Pitch Deck Generator (Left Pane - 1 Col) -->
+            <div class="bg-white rounded-2xl shadow-md border border-slate-200 p-6 flex flex-col justify-between ai-gradient-border">
+                <div>
+                    <div class="flex items-center gap-2 text-brand-800 font-bold border-b border-slate-100 pb-3 mb-4">
+                        <span class="bg-brand-50 text-brand-600 p-2 rounded-lg text-lg"><i class="fa-solid fa-bullhorn"></i></span>
+                        <div>
+                            <h3 class="text-md font-bold text-slate-800">Générateur de Pitch IA</h3>
+                            <p class="text-[10px] font-normal text-slate-500">Argumentaires optimisés par Gemini 3.1 Flash</p>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Cibler l'audience</label>
+                            <select id="pitch-audience" class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-600 focus:outline-none">
+                                <option value="Investisseur institutionnel / Business Angel Algérien">Investisseurs & VCs (Financement, ROI, Souveraineté)</option>
+                                <option value="Directeur d'établissement hospitalier (CHU Oran, Cliniques)">Directeurs de CHU & Cliniques (Sécurité, ISO 13485, Intégration)</option>
+                                <option value="Grand Public / Aidants familiaux (B2C)">Aidants familiaux (Simplicité, Suivi des aînés, Prix bas)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Ton de l'argumentaire</label>
+                            <select id="pitch-tone" class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-600 focus:outline-none">
+                                <option value="Percutant, axé sur les chiffres et la souveraineté économique">Financier & Souverain (Chiffres, Économies locales)</option>
+                                <option value="Hautement technique, orienté cybersécurité (NIST ASCON-128) et conformité médicale">Technique & Médical (Sécurité NIST, conformité)</option>
+                                <option value="Émotionnel, empathique, centré sur la tranquillité d'esprit">Humain & Réciproque (Paix d'esprit, protection des aînés)</option>
+                            </select>
+                        </div>
+
+                        <div class="pt-2">
+                            <button onclick="generateAIPitch()" id="btn-generate-pitch" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 px-4 rounded-lg text-xs transition-all flex justify-center items-center gap-2 shadow">
+                                <span id="pitch-btn-text">Générer le Pitch</span>
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Output Area for Pitch -->
+                <div class="mt-6 pt-4 border-t border-slate-100 flex-1 flex flex-col justify-end">
+                    <span class="text-[10px] uppercase text-slate-400 font-bold mb-2 block">Votre argumentaire sur-mesure</span>
+                    <div id="pitch-output-box" class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs text-slate-600 min-h-[140px] max-h-[220px] overflow-y-auto whitespace-pre-wrap leading-relaxed select-all">
+                        Sélectionnez vos critères ci-dessus et cliquez sur "Générer le Pitch" pour concevoir votre argumentaire de vente unique.
+                    </div>
+                    <button onclick="copyPitchToClipboard()" id="btn-copy-pitch" class="mt-2 text-[10px] text-brand-600 hover:text-brand-800 font-bold flex items-center gap-1 self-end transition-all">
+                        <i class="fa-regular fa-copy"></i> Copier l'argumentaire
+                    </button>
+                </div>
+            </div>
+
+            <!-- Strategic AI Advisor Chatbot (Right Pane - 2 Cols) -->
+            <div class="bg-white rounded-2xl shadow-md border border-slate-200 p-6 lg:col-span-2 flex flex-col justify-between">
+                <div>
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-100 pb-3 mb-4 gap-2">
+                        <div class="flex items-center gap-2 text-cyan-800 font-bold">
+                            <span class="bg-cyan-50 text-cyan-600 p-2 rounded-lg text-lg"><i class="fa-solid fa-brain"></i></span>
+                            <div>
+                                <h3 class="text-md font-bold text-slate-800">Copilote Stratégique MedSecure IA</h3>
+                                <p class="text-[10px] font-normal text-slate-500">Posez vos questions ou utilisez les raccourcis d'analyse</p>
+                            </div>
+                        </div>
+                        <!-- Optional API Key Input for standalone test -->
+                        <div class="flex items-center gap-2">
+                            <input type="password" id="custom-api-key" placeholder="Optionnel: Clé API Gemini" class="text-[10px] p-1.5 border border-slate-200 rounded bg-slate-50 w-44 focus:ring-1 focus:ring-brand-600 focus:outline-none" />
+                        </div>
+                    </div>
+
+                    <!-- Pre-defined advisory tools -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
+                        <button onclick="sendQuickPrompt('swot')" class="bg-slate-50 hover:bg-slate-100 border border-slate-200 p-2.5 rounded-lg text-left transition-all">
+                            <span class="text-[11px] font-bold text-slate-700 block"><i class="fa-solid fa-chart-line text-brand-600 mr-1"></i> Analyse SWOT</span>
+                            <span class="text-[9px] text-slate-500">Forces, faiblesses & risques du projet.</span>
+                        </button>
+                        <button onclick="sendQuickPrompt('market')" class="bg-slate-50 hover:bg-slate-100 border border-slate-200 p-2.5 rounded-lg text-left transition-all">
+                            <span class="text-[11px] font-bold text-slate-700 block"><i class="fa-solid fa-earth-africa text-emerald-600 mr-1"></i> Go-To-Market DZ</span>
+                            <span class="text-[9px] text-slate-500">Stratégie d'accès au marché algérien.</span>
+                        </button>
+                        <button onclick="sendQuickPrompt('regulatory')" class="bg-slate-50 hover:bg-slate-100 border border-slate-200 p-2.5 rounded-lg text-left transition-all">
+                            <span class="text-[11px] font-bold text-slate-700 block"><i class="fa-solid fa-certificate text-amber-600 mr-1"></i> Conseils ISO 13485</span>
+                            <span class="text-[9px] text-slate-500">Étape réglementaire médicale.</span>
+                        </button>
+                    </div>
+
+                    <!-- Chat History Pane -->
+                    <div id="ai-chat-history" class="chat-container border border-slate-100 bg-slate-50/50 rounded-xl p-4 mb-4 space-y-3 min-h-[220px]">
+                        <div class="flex gap-2.5">
+                            <div class="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0">IA</div>
+                            <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-xs text-slate-600 max-w-[85%] leading-relaxed">
+                                Bonjour ! Je suis votre copilote stratégique MedSecure. Je connais parfaitement votre Business Model Canvas ainsi que vos choix techniques (Rust, ASCON-128, ESP32-S3, Flespi). 
+                                <br><br>
+                                Cliquez sur un outil ci-dessus ou posez-moi vos questions spécifiques sur votre industrialisation ou votre plan financier.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input Controls -->
+                <div class="flex gap-2">
+                    <input type="text" id="ai-chat-input" onkeydown="if(event.key === 'Enter') sendChatMessage()" placeholder="Posez une question à l'IA (ex: Comment réduire notre coût variable ?)..." class="flex-1 text-xs p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-600 focus:outline-none" />
+                    <button onclick="sendChatMessage()" id="btn-send-chat" class="bg-brand-600 hover:bg-brand-700 text-white font-semibold px-4 rounded-xl text-xs transition-all flex items-center justify-center">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="bg-brand-dark text-slate-400 py-8 border-t border-slate-800 mt-12 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs space-y-2">
+            <p class="font-semibold text-slate-300">MedSecure Watch - Brevet national en instance d'homologation</p>
+            <p>Conformité visée : ISO 13485 (Dispositifs Médicaux) & ISO 27001 (Cybersécurité des données)</p>
+            <p class="text-[10px] text-slate-600">Généré à des fins académiques et de pitch entrepreneurial - © 2026</p>
+        </div>
+    </footer>
+
+    <!-- Interactive script for switching scenarios -->
+    <script>
+        function selectScenario(name, units, ca, margin) {
+            // Remove active classes
+            ['prudent', 'realiste', 'optimiste'].forEach(sc => {
+                const btn = document.getElementById(`btn-${sc}`);
+                if (btn) {
+                    btn.className = "px-4 py-2 text-xs font-semibold border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-all";
+                    if(sc === 'prudent') btn.classList.add('rounded-l-lg');
+                    if(sc === 'optimiste') btn.classList.add('rounded-r-lg');
+                }
+            });
+
+            // Set active class to selected
+            const activeBtn = document.getElementById(`btn-${name}`);
+            if (activeBtn) {
+                activeBtn.className = "px-4 py-2 text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-all";
+                if(name === 'prudent') activeBtn.classList.add('rounded-l-lg');
+                if(name === 'optimiste') activeBtn.classList.add('rounded-r-lg');
+            }
+
+            // Format numbers nicely
+            document.getElementById('display-ca').innerText = ca.toLocaleString() + ' DA';
+            document.getElementById('display-marge').innerText = margin.toLocaleString() + ' DA';
+            document.getElementById('label-target').innerText = `Objectif (${units} u.)`;
+
+            // Adjust gauge bar width (limit max rendering width to 100%)
+            const pct = Math.min((units / 150) * 100, 100);
+            const gaugeBar = document.getElementById('gauge-bar');
+            if (gaugeBar) gaugeBar.style.width = `${pct}%`;
+
+            // Update status text dynamically
+            const statusText = document.getElementById('status-text');
+            if (statusText) {
+                if (units < 93) {
+                    if (gaugeBar) gaugeBar.className = "bg-amber-500 h-4 rounded-full transition-all duration-500";
+                    statusText.innerHTML = `Nécessite <span class="font-bold text-amber-600">${93 - units} ventes de plus</span> pour atteindre le point mort.`;
+                } else {
+                    if (gaugeBar) gaugeBar.className = "bg-emerald-500 h-4 rounded-full transition-all duration-500";
+                    statusText.innerHTML = `<span class="font-bold text-emerald-600">Rentabilité validée !</span> Excédent de ${units - 93} unités au-dessus du seuil.`;
+                }
+            }
+        }
+        
+        // Initial call to set "Realiste" scenario
+        window.onload = function() {
+            selectScenario('realiste', 150, 4350000, 3225000);
+        }
+
+        
+        // Complete context of the MedSecure Watch project to ground LLM generations
+        const PROJECT_CONTEXT = `
+Contextual project information:
+Project: MedSecure Watch
+Domain: Secure Telemedicine / IoMT Startup
+Core Problem: Existing wearables transmit health data insecurely. Cyberattacks on healthcare increased by 300%.
+Solution/Tech Stack:
+- Secure Medical Smartwatch tracking BPM (Beats Per Minute) and SpO2 (Oximetry).
+- Cryptography: Real-time ASCON-128 end-to-end encryption (NIST 2023 winner). Hardware-accelerated on Gowin FPGA (consumes just 0.545 mW).
+- Hardware: ESP32-S3 microcontroller, Waveshare AMOLED circular screen, MAX30102 sensor, 500mAh battery (48h-72h battery life). Fully coded in 100% Rust without dynamic allocation (firmware with esp-hal/embassy, DSP pipeline for PPG filtering).
+- Server architecture: "Cloud Zero-Knowledge". The database stores ONLY encrypted blobs. Data decryption happens strictly client-side via WebAssembly in the doctor's web application. Low latency global transmission via MQTT Broker Flespi.
+- Financial Metrics (Year 1): 
+  - Break-even Point: 93 devices sold.
+  - Unit Material cost: 5,550 DA (ESP32-S3, MAX30102, 3D printed PETG/ASA casing, battery).
+  - Unit Variable cost: 7,500 DA (including local logistics, packaging, and manual soldering/assembly).
+  - Average Kit selling price (B2C): 20,000 DA (includes hardware + 3-month SaaS subscription). Ongoing monthly subscription is 1,500 DA/month.
+  - B2B Unit Price: 15,000 DA (sold directly to private clinics & elderly homes).
+  - Monthly Fixed Costs: 58,000 DA/month (Rent, cloud servers, local marketing, small founder stipend).
+- Roadmap & Next Steps: V1.1 (6 months) functional ECG; V2.0 (12-18 months) MLX90632 body temp + TensorFlow Lite Micro AI arrhythmia detection; V3.0 (24-36 months) integrated FPGA + 4G cellular transmission + AI fall detection.
+- Core Partners: Flespi, Gowin, USTO-MB university/LMSE lab, CHU d'Oran hospital for clinical validation, and the USTO incubator.
+`;
+
+        // Helper function for safe API calling with backoff
+        async function callGeminiAPI(promptText, systemInstructionText = "") {
+            // Prioritize user entered key, fallback to auto empty key (which canvas intercepts and populates)
+            const enteredKey = document.getElementById('custom-api-key').value.trim();
+            const apiKey = enteredKey || ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: promptText }] }],
+                systemInstruction: {
+                    parts: [{ text: systemInstructionText }]
+                }
+            };
+
+            let retries = 3;
+            let delay = 1000;
+
+            while (retries > 0) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP Error Status: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (textResponse) {
+                        return textResponse;
+                    } else {
+                        throw new Error("Malformatted API response structure");
+                    }
+                } catch (error) {
+                    retries--;
+                    if (retries === 0) {
+                        throw error;
+                    }
+                    await new Promise(res => setTimeout(res, delay));
+                    delay *= 2; // Exponential backoff
+                }
+            }
+        }
+
+        // Parse markdown helpers (bold, italic, list) to make output stunning
+        function parseMarkdownToHTML(text) {
+            let html = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`([^`]+)`/g, '<code class="bg-slate-200 px-1 py-0.5 rounded text-rose-600 font-mono text-[11px]">$1</code>')
+                .replace(/^\s*[-•]\s+(.*?)$/gm, '<li class="ml-4 list-disc">$1</li>')
+                .replace(/\n/g, '<br>');
+            return html;
+        }
+
+        // Action 1: Generate customized pitch
+        async function generateAIPitch() {
+            const btn = document.getElementById('btn-generate-pitch');
+            const btnText = document.getElementById('pitch-btn-text');
+            const outputBox = document.getElementById('pitch-output-box');
+            const audience = document.getElementById('pitch-audience').value;
+            const tone = document.getElementById('pitch-tone').value;
+
+            btn.disabled = true;
+            btnText.innerText = "Génération IA...";
+            outputBox.innerHTML = `<div class="flex items-center justify-center h-28 gap-2 text-brand-600">
+                <i class="fa-solid fa-spinner animate-spin text-lg"></i>
+                <span>Gemini synthétise votre pitch...</span>
+            </div>`;
+
+            const systemPrompt = `Vous êtes un expert en communication entrepreneuriale et de santé pour MedSecure Watch.
+Votre tâche est de rédiger un elevator pitch ultra-persuasif et concis (environ 150-200 mots).
+Utilisez ce contexte de projet pour être extrêmement précis et percutant :
+${PROJECT_CONTEXT}`;
+
+            const userPrompt = `Rédige un elevator pitch de MedSecure Watch spécifiquement destiné à l'audience suivante : "${audience}".
+Le ton doit être de nature : "${tone}".
+Insère des chiffres concrets du projet (ex: coûts, sécurité NIST, etc.) pour crédibiliser l'argumentaire.`;
+
+            try {
+                const pitch = await callGeminiAPI(userPrompt, systemPrompt);
+                outputBox.innerHTML = parseMarkdownToHTML(pitch);
+            } catch (err) {
+                console.error(err);
+                outputBox.innerHTML = `<span class="text-rose-600 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> Échec de la génération.</span><br>Veuillez vérifier votre connexion réseau. Si vous travaillez hors ligne, insérez une clé API valide dans le champ en haut à droite.`;
+            } finally {
+                btn.disabled = false;
+                btnText.innerText = "Générer le Pitch";
+            }
+        }
+
+        // Copy generated pitch to clipboard safely
+        function copyPitchToClipboard() {
+            const box = document.getElementById('pitch-output-box');
+            // Select content
+            const range = document.createRange();
+            range.selectNode(box);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            
+            try {
+                document.execCommand('copy');
+                const btnCopy = document.getElementById('btn-copy-pitch');
+                btnCopy.innerHTML = `<i class="fa-solid fa-check text-emerald-500"></i> Copié !`;
+                setTimeout(() => {
+                    btnCopy.innerHTML = `<i class="fa-regular fa-copy"></i> Copier l'argumentaire`;
+                }, 2000);
+            } catch (err) {
+                console.error("Copy failed", err);
+            }
+            window.getSelection().removeAllRanges();
+        }
+
+        // Chat helper to render user and AI messages
+        function appendMessage(sender, text, isUser = false) {
+            const container = document.getElementById('ai-chat-history');
+            const div = document.createElement('div');
+            div.className = "flex gap-2.5 " + (isUser ? "justify-end" : "");
+            
+            const avatar = isUser 
+                ? `<div class="bg-slate-400 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] order-2 flex-shrink-0">Vous</div>`
+                : `<div class="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0">IA</div>`;
+            
+            const bubbleBg = isUser ? "bg-brand-50 border-brand-100" : "bg-white border-slate-100";
+            const order = isUser ? "order-1" : "";
+
+            div.innerHTML = `
+                ${avatar}
+                <div class="${bubbleBg} ${order} p-3 rounded-xl shadow-sm border text-xs text-slate-600 max-w-[85%] leading-relaxed">
+                    ${isUser ? text : parseMarkdownToHTML(text)}
+                </div>
+            `;
+            
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Action 2: Chat input messaging
+        async function sendChatMessage() {
+            const input = document.getElementById('ai-chat-input');
+            const query = input.value.trim();
+            if (!query) return;
+
+            // Display user message
+            appendMessage("Vous", query, true);
+            input.value = "";
+
+            // Add thinking indicator
+            const tempId = "thinking-" + Date.now();
+            const container = document.getElementById('ai-chat-history');
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.id = tempId;
+            thinkingDiv.className = "flex gap-2.5";
+            thinkingDiv.innerHTML = `
+                <div class="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0">IA</div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-xs text-slate-400 max-w-[85%] flex items-center gap-2">
+                    <i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i>
+                    <span>MedSecure IA formule une réponse...</span>
+                </div>
+            `;
+            container.appendChild(thinkingDiv);
+            container.scrollTop = container.scrollHeight;
+
+            const systemPrompt = `Vous êtes l'Assistant IA Principal de MedSecure Watch.
+Vous devez conseiller les fondateurs du projet sur la stratégie marketing, la production, le plan de financement et l'architecture technique (Rust, ASCON-128, etc.).
+Votre comportement doit être hautement professionnel, encourageant, réaliste et respectueux du cadre économique de l'Algérie.
+Voici l'ensemble du contexte validé :
+${PROJECT_CONTEXT}`;
+
+            try {
+                const response = await callGeminiAPI(query, systemPrompt);
+                document.getElementById(tempId).remove();
+                appendMessage("IA", response, false);
+            } catch (err) {
+                console.error(err);
+                document.getElementById(tempId).remove();
+                appendMessage("IA", "Oups ! J'ai rencontré une petite difficulté technique pour me connecter à mon modèle de raisonnement. Assurez-vous d'avoir une connexion active et que votre clé API Gemini (si fournie) soit valide.", false);
+            }
+        }
+
+        // Action 3: Pre-defined advisory tools
+        function sendQuickPrompt(type) {
+            let queryText = "";
+            if (type === 'swot') {
+                queryText = "Fais une analyse SWOT détaillée et réaliste pour MedSecure Watch d'après notre structure de coûts, scénarios financiers de l'année 1, forces (ASCON-128, 100% Rust) et menaces (obstacles d'importation de composants en Algérie, certification médicale).";
+            } else if (type === 'market') {
+                queryText = "Conçois un plan de Go-To-Market percutant ciblant spécifiquement la région d'Oran et l'ouest de l'Algérie, en détaillant comment s'approcher des CHU et convaincre les cliniques privées d'adopter notre modèle B2B.";
+            } else if (type === 'regulatory') {
+                queryText = "Quelles sont les étapes clés, réglementations exactes et pré-requis techniques pour certifier notre montre connectée selon la norme ISO 13485 en Algérie, et comment la conformité ISO 27001 influence notre architecture Zero-Knowledge ?";
+            }
+            if (queryText) {
+                sendCustomPrompt(queryText);
+            }
+        }
+
+        // Internal caller for quick buttons
+        async function sendCustomPrompt(query) {
+            appendMessage("Vous", query, true);
+            const tempId = "thinking-" + Date.now();
+            const container = document.getElementById('ai-chat-history');
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.id = tempId;
+            thinkingDiv.className = "flex gap-2.5";
+            thinkingDiv.innerHTML = `
+                <div class="bg-brand-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] flex-shrink-0">IA</div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-100 text-xs text-slate-400 max-w-[85%] flex items-center gap-2">
+                    <i class="fa-solid fa-circle-notch animate-spin text-brand-600"></i>
+                    <span>Génération de l'étude stratégique par Gemini...</span>
+                </div>
+            `;
+            container.appendChild(thinkingDiv);
+            container.scrollTop = container.scrollHeight;
+
+            const systemPrompt = `Vous êtes un expert-conseil certifié en incubateur et spécialiste des startups MedTech. 
+Votre mission est de fournir une analyse approfondie et structurée d'après les données de MedSecure Watch :
+${PROJECT_CONTEXT}`;
+
+            try {
+                const response = await callGeminiAPI(query, systemPrompt);
+                document.getElementById(tempId).remove();
+                appendMessage("IA", response, false);
+            } catch (err) {
+                console.error(err);
+                document.getElementById(tempId).remove();
+                appendMessage("IA", "Désolé, une erreur s'est produite lors de l'appel à l'API Gemini. Veuillez réessayer d'ici quelques instants.", false);
+            }
+        }
+    </script>
+</body>
+</html>
