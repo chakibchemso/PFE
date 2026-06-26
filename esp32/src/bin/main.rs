@@ -114,8 +114,9 @@ async fn main(spawner: Spawner) -> ! {
     let bus: &'static SystemBus = mk_static!(SystemBus, SystemBus::new());
 
     let board_periph = init_board(
-        p.PSRAM, p.SPI2, p.DMA_CH0, p.I2C0, p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7, p.GPIO11, p.GPIO12,
-        p.GPIO13, p.GPIO14, p.GPIO15, p.GPIO38, p.GPIO39, p.GPIO40,
+        p.PSRAM, p.SPI2, p.DMA_CH0, p.I2C0, p.I2C1, p.GPIO4, p.GPIO5, p.GPIO6, p.GPIO7, p.GPIO11,
+        p.GPIO12, p.GPIO13, p.GPIO14, p.GPIO15, p.GPIO16, p.GPIO17, p.GPIO18, p.GPIO38, p.GPIO39,
+        p.GPIO40,
     );
 
     let sw_int1;
@@ -130,15 +131,22 @@ async fn main(spawner: Spawner) -> ! {
 
     let net = system::net::init(p.WIFI).await;
 
-    let i2c_bus = mk_static!(
+    // I2C0: shared bus for touch, AXP2101, GPS, and I/O expander
+    let i2c_bus0 = mk_static!(
         I2cBus,
-        I2cBus::new(board_periph.i2c_bus, esp32::system::board::I2C_FREQ_KHZ)
+        I2cBus::new(board_periph.i2c_bus0, esp32::system::board::I2C_FREQ_KHZ)
     );
 
-    let touch_i2c = i2c_bus.device(0x5A, "touch");
-    let oxymeter_i2c = i2c_bus.device(0x57, "oxymeter");
-    let axp2101_i2c = i2c_bus.device(0x34, "axp2101");
-    // let gps_i2c = i2c_bus.device(0x50, "gps"); // TODO: re-enable GPS
+    // I2C1: dedicated bus for the MAX30102 oxymeter
+    let i2c_bus1 = mk_static!(
+        I2cBus,
+        I2cBus::new(board_periph.i2c_bus1, esp32::system::board::I2C_FREQ_KHZ)
+    );
+
+    let touch_i2c = i2c_bus0.device(0x5A, "touch");
+    let oxymeter_i2c = i2c_bus1.device(0x57, "oxymeter");
+    let axp2101_i2c = i2c_bus0.device(0x34, "axp2101");
+    // let gps_i2c = i2c_bus0.device(0x50, "gps"); // TODO: re-enable GPS
 
     // ── Storage ─────────────────────────────────────────────────────────
     let storage = mk_static!(StorageService, StorageService::new(flash));
@@ -222,9 +230,14 @@ async fn main(spawner: Spawner) -> ! {
 
     services::mqtt::register(&spawner, net.stack, bus);
 
-    services::sensing::register(&spawner, oxymeter_i2c, cipher, bus, unsafe {
-        core::mem::transmute(p.SENS)
-    })
+    services::sensing::register(
+        &spawner,
+        oxymeter_i2c,
+        board_periph.oxymeter_int,
+        cipher,
+        bus,
+        unsafe { core::mem::transmute(p.SENS) },
+    )
     .await;
 
     // services::gps::register(&spawner, gps_i2c, bus); // TODO: re-enable GPS

@@ -25,8 +25,15 @@
 //! ## GPS Module (I2C, LC76G)
 //! | Signal  | GPIO  |
 //! |---------|-------|
-//! | GPS_SDA | GPIO15|  (shared I2C bus)
-//! | GPS_SCL | GPIO14|  (shared I2C bus)
+//! | GPS_SDA | GPIO15|  (shared I2C0 bus)
+//! | GPS_SCL | GPIO14|  (shared I2C0 bus)
+//!
+//! ## MAX30102 Oxymeter (I2C1, dedicated bus)
+//! | Signal   | GPIO  |
+//! |----------|-------|
+//! | OXY_SCL  | GPIO16|
+//! | OXY_SDA  | GPIO17|
+//! | OXY_INT  | GPIO18|
 
 use esp_hal::{
     Async,
@@ -61,7 +68,8 @@ pub const I2C_FREQ_KHZ: u32 = 400;
 
 /// Initialized board peripherals for the production board
 pub struct BoardPeripherals {
-    pub i2c_bus: I2c<'static, Async>,
+    pub i2c_bus0: I2c<'static, Async>,
+    pub i2c_bus1: I2c<'static, Async>,
     pub qspi_spi: SpiDma<'static, Async>,
     pub qspi_rx: DmaRxBuf,
     pub qspi_tx: DmaTxBuf,
@@ -70,24 +78,29 @@ pub struct BoardPeripherals {
     pub display_te: Input<'static>,
     pub touch_rst: Output<'static>,
     pub touch_int: Input<'static>,
+    pub oxymeter_int: Input<'static>,
 }
 
 /// Initialize board-level peripherals for the production CO5300/CST9217 board.
 ///
 /// ## Consumed peripherals
 /// - SPI2, DMA_CH0: QSPI display bus with DMA
-/// - I2C0: shared bus for touch, GPS, and sensors
-/// - GPIO14, GPIO15: I2C SCL/SDA
+/// - I2C0: shared bus for touch, AXP2101, GPS, and I/O expander
+/// - GPIO14, GPIO15: I2C0 SCL/SDA
+/// - I2C1: dedicated bus for the MAX30102 oxymeter
+/// - GPIO16, GPIO17: I2C1 SCL/SDA
 /// - GPIO4, GPIO5, GPIO6, GPIO7, GPIO12, GPIO38: QSPI data/control
 /// - GPIO13: display TE (tearing effect / VSYNC input)
 /// - GPIO39: display reset
 /// - GPIO11, GPIO40: touch INT and reset
+/// - GPIO18: MAX30102 INT (new-sample-ready interrupt, active-low)
 #[allow(clippy::too_many_arguments)]
 pub fn init_board(
     psram: peripherals::PSRAM<'static>,
     spi2: peripherals::SPI2<'static>,
     dma_ch0: peripherals::DMA_CH0<'static>,
     i2c0: peripherals::I2C0<'static>,
+    i2c1: peripherals::I2C1<'static>,
     gpio4: peripherals::GPIO4<'static>,
     gpio5: peripherals::GPIO5<'static>,
     gpio6: peripherals::GPIO6<'static>,
@@ -97,6 +110,9 @@ pub fn init_board(
     gpio13: peripherals::GPIO13<'static>,
     gpio14: peripherals::GPIO14<'static>,
     gpio15: peripherals::GPIO15<'static>,
+    gpio16: peripherals::GPIO16<'static>,
+    gpio17: peripherals::GPIO17<'static>,
+    gpio18: peripherals::GPIO18<'static>,
     gpio38: peripherals::GPIO38<'static>,
     gpio39: peripherals::GPIO39<'static>,
     gpio40: peripherals::GPIO40<'static>,
@@ -127,6 +143,9 @@ pub fn init_board(
     // --- Touch control pins ---
     let touch_rst = Output::new(gpio40, Level::Low, OutputConfig::default());
     let touch_int = Input::new(gpio11, InputConfig::default().with_pull(Pull::Up));
+
+    // --- Oxymeter interrupt pin ---
+    let oxymeter_int = Input::new(gpio18, InputConfig::default().with_pull(Pull::Up));
 
     // --- QSPI setup (SPI2 with quad I/O lines) ---
     let (rx_descriptors, tx_descriptors) = dma_descriptors!(SPI_DMA_RX_SIZE, SPI_DMA_TX_SIZE);
@@ -161,8 +180,8 @@ pub fn init_board(
     // SpiDma directly and uses native half_duplex_write for QSPI transfers.
     let (qspi_spi, qspi_rx, qspi_tx) = qspi_bus.split();
 
-    // --- I2C setup (shared bus for touch + GPS + sensors) ---
-    let i2c_bus = I2c::new(
+    // --- I2C0 setup (shared bus for touch + AXP2101 + GPS + I/O expander) ---
+    let i2c_bus0 = I2c::new(
         i2c0,
         I2cConfig::default()
             .with_frequency(Rate::from_khz(I2C_FREQ_KHZ))
@@ -170,13 +189,26 @@ pub fn init_board(
             // transaction wedge the shared async I2C bus indefinitely.
             .with_timeout(BusTimeout::BusCycles(8_000)),
     )
-    .expect("Failed to initialize I2C")
+    .expect("Failed to initialize I2C0")
     .with_scl(gpio14)
     .with_sda(gpio15)
     .into_async();
 
+    // --- I2C1 setup (dedicated bus for MAX30102 oxymeter) ---
+    let i2c_bus1 = I2c::new(
+        i2c1,
+        I2cConfig::default()
+            .with_frequency(Rate::from_khz(I2C_FREQ_KHZ))
+            .with_timeout(BusTimeout::BusCycles(8_000)),
+    )
+    .expect("Failed to initialize I2C1")
+    .with_scl(gpio16)
+    .with_sda(gpio17)
+    .into_async();
+
     BoardPeripherals {
-        i2c_bus,
+        i2c_bus0,
+        i2c_bus1,
         qspi_spi,
         qspi_rx,
         qspi_tx,
@@ -185,5 +217,6 @@ pub fn init_board(
         display_te,
         touch_rst,
         touch_int,
+        oxymeter_int,
     }
 }

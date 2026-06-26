@@ -1,7 +1,8 @@
-use defmt::{info, trace};
+use defmt::{info, trace, warn};
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, watch::Sender};
 use embassy_time::{Duration, Instant, Timer};
+use esp_hal::gpio::Input;
 use max3010x_async::{
     AdcRange, Led, LedPulseWidth, Max3010x, SampleAveraging, SamplingRate,
     marker::{ic::Max30102, mode::Oximeter},
@@ -10,14 +11,9 @@ use max3010x_async::{
 /// IR DC mean below this threshold indicates no finger on the sensor.
 const FINGER_DC_THRESHOLD: f32 = 500_000.0;
 
-/// Intermediary sample buffer: the acquisition task pushes processed samples here
-/// in batches. The render task drains a fraction per frame into WAVEFORM_CHANNEL
-/// so the PPG chart updates smoothly regardless of the batch cadence.
-pub static SAMPLE_BUFFER: Channel<CriticalSectionRawMutex, (i16, i16), 256> = Channel::new();
-
-/// Waveform samples (clean_red, clean_ir) consumed by the UI render loop
-/// for the PPG chart. Filled from SAMPLE_BUFFER at a paced rate tied to
-/// the render frame time.
+/// Processed PPG samples (clean_red, clean_ir) sent from the acquisition task
+/// and consumed by the UI render loop for the PPG chart. With interrupt-driven
+/// reading at ~100 Hz, samples arrive one at a time — no batch pacing needed.
 pub static WAVEFORM_CHANNEL: Channel<CriticalSectionRawMutex, (i16, i16), 256> = Channel::new();
 
 use crate::drivers::bus::{BusError, I2cPeripheral};
@@ -43,6 +39,7 @@ const CH_CLEAN_IR: u8 = 3;
 
 pub struct OxymeterRunner {
     sensor: Max3010x<I2cPeripheral, Max30102, Oximeter>,
+    oxymeter_int: Input<'static>,
 
     // RED Pipeline
     dc_block_red: MovingMeanSubtractor<100>,
@@ -77,12 +74,15 @@ impl OxymeterRunner {
         // Seed: assume finger is present until proven otherwise
         self.finger_present = true;
 
-        // Clear before starting the timer
+        // Clear FIFO before starting
         self.sensor.clear_fifo().await.unwrap();
 
+        // Drain any stale interrupt that may be pending from init
+        let _ = self.sensor.read_interrupt_status().await;
+
         loop {
-            // Batch collect samples, max = 10ms * 32
-            Timer::after_millis(300).await;
+            // Wait for MAX30102 INT pin to go low (new sample ready)
+            self.oxymeter_int.wait_for_low().await;
 
             let chrono = Instant::now().as_micros();
             let mut read_time = 0u64;
@@ -94,6 +94,14 @@ impl OxymeterRunner {
                 Ok(samples_read) => {
                     read_time = Instant::now().as_micros() - chrono;
                     sample_count = samples_read;
+
+                    // Clear the interrupt status so INT pin goes high again
+                    if let Err(e) = self.sensor.read_interrupt_status().await {
+                        warn!(
+                            "oxymeter read_interrupt_status error: {}",
+                            defmt::Debug2Format(&e)
+                        );
+                    }
 
                     // Track the last IR DC mean in the batch for finger detection
                     let mut last_dc_ir = 0.0f32;
@@ -112,8 +120,8 @@ impl OxymeterRunner {
                         let clean_red = self.bandpass_red.process(pre_dc_red);
                         let clean_ir = self.bandpass_ir.process(pre_dc_ir);
 
-                        // 2b. Buffer the processed sample for the PPG chart
-                        let _ = SAMPLE_BUFFER.try_send((clean_red as i16, clean_ir as i16));
+                        // Forward the processed sample to the PPG chart
+                        let _ = WAVEFORM_CHANNEL.try_send((clean_red as i16, clean_ir as i16));
 
                         // 3. Continuously calculate the current SpO2 percentage
                         let current_spo2 = self.spo2_calc.process_sample(
@@ -224,6 +232,7 @@ impl OxymeterHandle {
     pub async fn start(
         spawner: &Spawner,
         i2c: I2cPeripheral,
+        oxymeter_int: Input<'static>,
         sender: Sender<'static, CriticalSectionRawMutex, (u8, u8, u8), 2>,
     ) -> Result<Self, BusError> {
         let mut sensor = Max3010x::new_max30102(i2c);
@@ -251,10 +260,15 @@ impl OxymeterHandle {
 
         // Max is dumb, rollover must be enabled for some reason
         sensor.enable_fifo_rollover().await.unwrap();
+
+        // Use the new-FIFO-data-ready interrupt (PPG_RDY) instead of polling
+        sensor.enable_new_fifo_data_ready_interrupt().await.unwrap();
+
         sensor.clear_fifo().await.unwrap();
 
         let runner = OxymeterRunner {
             sensor,
+            oxymeter_int,
             dc_block_red: MovingMeanSubtractor::new(),
             bandpass_red: FirFilter::new(FIR_COEFFS),
             dc_block_ir: MovingMeanSubtractor::new(),

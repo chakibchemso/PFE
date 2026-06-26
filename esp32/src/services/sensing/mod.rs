@@ -1,5 +1,6 @@
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, watch::Sender};
+use esp_hal::gpio::Input;
 
 use crate::{
     app::bus::SystemBus,
@@ -18,6 +19,7 @@ use pipeline::pipeline_task;
 pub async fn register(
     spawner: &Spawner,
     i2c_device: I2cPeripheral,
+    oxymeter_int: Input<'static>,
     cipher: crypto::Ascon,
     bus: &'static SystemBus,
     tsens: esp_hal::peripherals::SENS<'static>,
@@ -26,7 +28,7 @@ pub async fn register(
         bus.vitals.sender();
 
     // Vitals producer (real MAX30102 oxymeter) — starts acquisition_task internally
-    OxymeterHandle::start(spawner, i2c_device, vitals_sender)
+    OxymeterHandle::start(spawner, i2c_device, oxymeter_int, vitals_sender)
         .await
         .unwrap();
 

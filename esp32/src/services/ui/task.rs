@@ -3,7 +3,7 @@
 
 use alloc::vec::Vec;
 use core::ffi::CStr;
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::Ordering;
 
 use defmt::{error, trace};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -31,7 +31,7 @@ pub static PENDING_SAVES: Channel<CriticalSectionRawMutex, PendingSave, 8> = Cha
 
 use crate::app::bus::{BatteryState, GpsFix};
 use crate::drivers::gps;
-use crate::drivers::oxymeter::{SAMPLE_BUFFER, WAVEFORM_CHANNEL};
+use crate::drivers::oxymeter::WAVEFORM_CHANNEL;
 use crate::services::rendering::display::SendDisplay;
 use crate::services::rendering::task::{
     BRIGHTNESS_CHANNEL, DISPLAY_READY, flush_task, init_lvgl_display, log_perf, mark_frame_start,
@@ -192,6 +192,10 @@ pub async fn render_task(
     let mut last_tick = embassy_time::Instant::now();
     let mut utc_rx = utc_rx;
     let mut epoch_secs = 0u64;
+
+    // PPG decimation counter: at ~100 Hz acquisition we take every 4th sample
+    // so the chart runs at ~25 Hz → 50 points = 2 s visible window.
+    let mut ppg_decim = 0u8;
 
     // 8. Render loop
     loop {
@@ -397,33 +401,13 @@ pub async fn render_task(
             }
         }
 
-        // Bridge SAMPLE_BUFFER → WAVEFORM_CHANNEL at a paced rate
-        // tied to the render frame cadence. Drain half (rounded up) of what's
-        // available each frame so the PPG graph updates smoothly instead of
-        // jumping by 30 samples every ~300ms.
-        //
-        // Also decimate by 4: with 100Hz acquisition and 50 chart points,
-        // forwarding every 4th sample gives 25Hz → 50 points = 2s window.
-        static PPG_DECIMATE: AtomicU8 = AtomicU8::new(0);
-
-        let available = SAMPLE_BUFFER.len();
-        if available > 0 {
-            let to_pull = core::cmp::max(1, (available + 1) / 2);
-            for _ in 0..to_pull {
-                if let Ok((red, ir)) = SAMPLE_BUFFER.try_receive() {
-                    let div = PPG_DECIMATE.load(Ordering::Relaxed);
-                    PPG_DECIMATE.store((div + 1) % 4, Ordering::Relaxed);
-                    if div == 0 {
-                        let _ = WAVEFORM_CHANNEL.try_send((red, ir));
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-
-        // Drain waveform samples into PPG chart
+        // Drain waveform samples into the PPG chart, decimating by 4
+        // so the 100 Hz acquisition maps to a usable 2 s window.
         while let Ok((red, ir)) = WAVEFORM_CHANNEL.try_receive() {
+            ppg_decim = (ppg_decim + 1) % 4;
+            if ppg_decim != 0 {
+                continue;
+            }
             unsafe {
                 lv_bevy_ecs::sys::lv_chart_set_next_value(
                     handles.vitals.chart,
