@@ -237,6 +237,8 @@ async fn main(spawner: Spawner) -> ! {
         cipher,
         bus,
         unsafe { core::mem::transmute(p.SENS) },
+        p.ADC1,
+        p.GPIO3,
     )
     .await;
 

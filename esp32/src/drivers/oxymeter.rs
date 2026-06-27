@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use defmt::{info, trace, warn};
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, watch::Sender};
@@ -17,6 +18,7 @@ const FINGER_DC_THRESHOLD: f32 = 500_000.0;
 pub static WAVEFORM_CHANNEL: Channel<CriticalSectionRawMutex, (i16, i16), 256> = Channel::new();
 
 use crate::drivers::bus::{BusError, I2cPeripheral};
+use crate::drivers::ntc::SKIN_TEMP;
 use crate::dsp::{
     BpmCalculator, FIR_COEFFS, FirFilter, MovingMeanSubtractor, Smoother, Spo2Calculator,
 };
@@ -140,7 +142,8 @@ impl OxymeterRunner {
                             self.finger_present = true;
                             let smooth_bpm = self.bpm_smoother.process(new_bpm);
                             let smooth_spo2 = self.spo2_smoother.process(current_spo2);
-                            sender.send((smooth_bpm as u8, smooth_spo2 as u8, 36u8));
+                            let temp = SKIN_TEMP.load(Ordering::Relaxed);
+                            sender.send((smooth_bpm as u8, smooth_spo2 as u8, temp));
                         }
                     }
 
