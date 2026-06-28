@@ -1,8 +1,10 @@
 //! Touch input service — CST9217 driver + LVGL pointer input device.
 //!
-//! The touch task polls the CST9217 and writes coordinates to shared atomics.
-//! The LVGL input device polls those atomics via lv_bevy_ecs's `InputDevice`.
-//! Both run on core 1; Relaxed ordering is sufficient.
+//! The touch task polls the CST9217 on **core 0** and writes coordinates to
+//! shared atomics. The LVGL input device polls those atomics via
+//! `lv_bevy_ecs`'s `InputDevice` on **core 1**. The split ensures that
+//! I²C touch reads are never starved when LVGL rendering is busy.
+//! Cross-core `Relaxed` ordering is sufficient for the atomics.
 
 pub mod driver;
 pub mod task;

@@ -138,7 +138,7 @@ pub fn create(parent: &mut lv_bevy_ecs::widgets::Wdg) -> Handles {
         lv_chart_set_type(chart, lv_chart_type_t_LV_CHART_TYPE_LINE);
         lv_chart_set_update_mode(chart, lv_chart_update_mode_t_LV_CHART_UPDATE_MODE_CIRCULAR);
         lv_chart_set_point_count(chart, 50);
-        lv_chart_set_axis_range(chart, lv_chart_axis_t_LV_CHART_AXIS_PRIMARY_Y, -100, 100);
+        lv_chart_set_axis_range(chart, lv_chart_axis_t_LV_CHART_AXIS_PRIMARY_Y, -200, 200);
         lv_obj_set_size(chart, BAR_W, CHART_H);
         lv_obj_set_pos(chart, -1, -1);
         lv_obj_set_style_border_width(chart, 0, 0);

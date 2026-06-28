@@ -28,7 +28,7 @@ data_queue: queue.Queue[str] = queue.Queue()
 
 # ─── Configuration ───────────────────────────────────────────────────────────
 
-BUFFER_SIZE = 200  # samples visible in the scroll window
+BUFFER_SIZE = 400  # samples visible in the scroll window
 FIG_BG = (0.07, 0.07, 0.095)  # dark background
 AXES_BG = (0.09, 0.09, 0.125)
 GRID_COLOR = (0.18, 0.18, 0.22)

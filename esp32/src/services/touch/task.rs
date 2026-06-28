@@ -6,6 +6,7 @@ use super::driver::TouchDevice;
 use super::{TOUCH_PRESSED, TOUCH_X, TOUCH_Y};
 use crate::drivers::bus::I2cPeripheral;
 use crate::ui::config::RenderConfig;
+use crate::utils::SendWrap;
 
 const TOUCH_READ_TIMEOUT: Duration = Duration::from_millis(50);
 const RELEASE_CONFIRM: Duration = Duration::from_millis(10);
@@ -13,11 +14,15 @@ const TOUCH_IDLE_TIMEOUT: Duration = Duration::from_millis(200);
 
 #[embassy_executor::task]
 pub async fn touch_task(
-    i2c: I2cPeripheral,
-    touch_rst: Output<'static>,
+    i2c: SendWrap<I2cPeripheral>,
+    touch_rst: SendWrap<Output<'static>>,
     config: RenderConfig,
-    mut touch_int: Input<'static>,
+    touch_int: SendWrap<Input<'static>>,
 ) {
+    let i2c = i2c.0;
+    let touch_rst = touch_rst.0;
+    let mut touch_int = touch_int.0;
+
     let delay = embassy_time::Delay;
 
     let mut device = TouchDevice::new(i2c, delay, touch_rst, &config)

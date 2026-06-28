@@ -17,7 +17,7 @@ use esp_rtos::{embassy::Executor, start_second_core};
 use esp32::{
     app::bus::SystemBus,
     crypto,
-    drivers::bus::{I2cBus, I2cPeripheral},
+    drivers::bus::I2cBus,
     mk_static,
     services::{
         self,
@@ -38,7 +38,8 @@ getrandom::register_custom_getrandom!(utils::custom_getrandom);
 const CORE1_STACK_SIZE: usize = 12 * 1024;
 static CORE1_STACK: StaticCell<Stack<CORE1_STACK_SIZE>> = StaticCell::new();
 
-/// Thread-mode executor for core 1 (LVGL render loop + touch).
+/// Thread-mode executor for core 1 (LVGL render loop).
+/// Touch task runs on core 0 to prevent LVGL rendering from starving touch I2C reads.
 static CORE1_EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 // ── Core 1 bootstrap ──────────────────────────────────────────────────────
@@ -53,10 +54,6 @@ async fn core1_bootstrap(
     cs: SendWrap<Output<'static>>,
     rst: SendWrap<Output<'static>>,
     display_te: SendWrap<Input<'static>>,
-    touch_int: SendWrap<Input<'static>>,
-    touch_rst: SendWrap<Output<'static>>,
-    touch_i2c: SendWrap<I2cPeripheral>,
-    render_config: ui::RenderConfig,
     bus: &'static SystemBus,
     storage: &'static StorageService,
     stored_config: &'static Mutex<CriticalSectionRawMutex, StoredConfig>,
@@ -92,12 +89,7 @@ async fn core1_bootstrap(
         .unwrap(),
     );
 
-    spawner.spawn(
-        services::touch::task::touch_task(touch_i2c.0, touch_rst.0, render_config, touch_int.0)
-            .unwrap(),
-    );
-
-    info!("Core 1: LVGL + flush + touch running");
+    info!("Core 1: LVGL + flush running (touch on core 0)");
 
     loop {
         embassy_time::Timer::after_secs(60).await;
@@ -169,20 +161,32 @@ async fn main(spawner: Spawner) -> ! {
 
     services::time::register(&spawner, net.stack, bus);
 
+    // ── Touch task on core 0 (separate from LVGL on core 1) ───────────────
+    // Spawning the CST9217 driver task on core 0 ensures touch I2C reads are
+    // never starved when LVGL rendering is busy on core 1.
+    {
+        let touch_config = ui::RenderConfig::production();
+        spawner.spawn(
+            services::touch::task::touch_task(
+                SendWrap(touch_i2c),
+                SendWrap(board_periph.touch_rst),
+                touch_config,
+                SendWrap(board_periph.touch_int),
+            )
+            .unwrap(),
+        );
+    }
+
     // ── Start core 1 ────────────────────────────────────────────────────
     {
         let core1_stack = CORE1_STACK.init(Stack::new());
-        let render_config = ui::RenderConfig::production();
 
         let qspi_spi = SendWrap(board_periph.qspi_spi);
         let qspi_rx = SendWrap(board_periph.qspi_rx);
         let qspi_tx = SendWrap(board_periph.qspi_tx);
         let cs = SendWrap(board_periph.display_cs);
         let rst = SendWrap(board_periph.display_rst);
-        let t_rst = SendWrap(board_periph.touch_rst);
-        let t_i2c = SendWrap(touch_i2c);
         let display_te = SendWrap(board_periph.display_te);
-        let touch_int = SendWrap(board_periph.touch_int);
 
         start_second_core(p.CPU_CTRL, sw_int1, core1_stack, move || {
             let executor = CORE1_EXECUTOR.init(Executor::new());
@@ -203,10 +207,6 @@ async fn main(spawner: Spawner) -> ! {
                         cs,
                         rst,
                         display_te,
-                        touch_int,
-                        t_rst,
-                        t_i2c,
-                        render_config,
                         bus,
                         storage,
                         stored_config,
